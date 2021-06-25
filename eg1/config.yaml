@@ -1,0 +1,70 @@
+# Copyright (c) 2021 PaddlePaddle Authors. All Rights Reserved
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+fbank:
+  sr: 16000 # sample rate
+  window_size: 400 #25ms
+  hop_length: 160 #10ms
+  n_mels: 80
+  fmin: 20
+  fmax: 7600
+  to_db: False # set true to compute log FB
+  window: hann
+  center: True
+  pad_mode: reflect
+  ref: 1.0
+  amin: !!float 1e-10
+  top_db: ~ 
+
+batch_size :  64
+val_batch_size: 32
+num_classes: 5994
+max_mel_len :  501
+mel_crop_len :  400 # used for augmentation, 4 seconds audio
+balanced_sampling :  False
+epoch_num :  500
+# for training from scratch
+start_lr :  0.0003
+warm_steps: 1
+# for fine-tuning
+#start_lr :  0.00001
+#add dropout in resnet precedding the fc layer
+
+# set the data path accordingly
+data :  '../vox2/fbank/*.h5'
+spk_scp: '../vox2/spk.scp'
+train_keys: '../vox2/train_keys.txt'
+val_keys: '../vox2/val_keys.txt'
+model_dir :  './checkpoints/'
+log_path :  './log'
+checkpoint_step :  10000
+lr_dec_per_step :  20000
+num_workers :  16
+
+max_time_mask: 3
+max_freq_mask: 0
+max_time_mask_width: 60
+max_freq_mask_width: 0
+model:
+  name: ResNetSE34
+  params:
+    feature_dim: 256 
+
+loss:
+  name: AMSoftmaxLoss
+  params:
+    m: 0.3
+    s: 30
+    feature_dim: 256
+    n_classes: 5994
+
