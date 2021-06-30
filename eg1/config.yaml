@@ -13,58 +13,52 @@
 # limitations under the License.
 fbank:
   sr: 16000 # sample rate
-  window_size: 400 #25ms
+  n_fft: 512
+  win_length: 400 #25ms
   hop_length: 160 #10ms
-  n_mels: 80
+  n_mels: 64
   fmin: 20
   fmax: 7600
-  to_db: False # set true to compute log FB
   window: hann
-  center: True
-  pad_mode: reflect
-  ref: 1.0
-  amin: !!float 1e-10
-  top_db: ~ 
 
-batch_size :  64
-val_batch_size: 32
+
+batch_size :  128
+val_batch_size: 16
+num_workers :  32
 num_classes: 5994
-max_mel_len :  501
-mel_crop_len :  400 # used for augmentation, 4 seconds audio
+duration :  2.0
 balanced_sampling :  False
 epoch_num :  500
-# for training from scratch
-start_lr :  0.0003
-warm_steps: 1
-# for fine-tuning
-#start_lr :  0.00001
-#add dropout in resnet precedding the fc layer
+start_lr :  0.001
+warm_steps: 100
 
 # set the data path accordingly
-data :  '../vox2/fbank/*.h5'
-spk_scp: '../vox2/spk.scp'
-train_keys: '../vox2/train_keys.txt'
-val_keys: '../vox2/val_keys.txt'
-model_dir :  './checkpoints/'
-log_path :  './log'
-checkpoint_step :  10000
-lr_dec_per_step :  20000
-num_workers :  16
+spk_scp: ../data/vox2/audio.scp
+train_keys: ../data/all_keys.txt # _tiny.txt
+val_keys: ../data/val_keys_tiny.txt
+model_dir :  ./checkpoints/
+log_dir :  ./log
+log_step: 10
+checkpoint_step :  5000
+eval_step: 10000
+lr_dec_per_step :  10000
 
 max_time_mask: 3
-max_freq_mask: 0
-max_time_mask_width: 60
-max_freq_mask_width: 0
+max_freq_mask: 1
+max_time_mask_width: 30
+max_freq_mask_width: 10
 model:
-  name: ResNetSE34
+  name: ResNetSE34V2 #ResNetSE34V2,ResNetSE34
   params:
-    feature_dim: 256 
+    feature_dim: 256
+    encoder_type: ASP #ASP #ASP,SAP
+    n_mels: 64 # should be the same as in the fbank config
+
 
 loss:
   name: AMSoftmaxLoss
   params:
     m: 0.3
-    s: 30
+    s: 30.0
     feature_dim: 256
     n_classes: 5994
-
