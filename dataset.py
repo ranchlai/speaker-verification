@@ -25,11 +25,12 @@ import numpy as np
 import paddle
 import paddleaudio
 import yaml
-from paddle.io import DataLoader, Dataset, IterableDataset
+#from paddle.io import DataLoader, Dataset, IterableDataset
 from paddle.utils import download
 from paddleaudio import augment
-from paddleaudio.utils.log import logger
+from paddleaudio.utils.logging import get_logger
 
+logger = get_logger(__file__)
 
 
 def spect_permute(spect, tempo_axis, nblocks):
@@ -65,96 +66,93 @@ def random_choice(a):
     return a[int(i)]
 
 
-def get_keys(file_pointers):
-    all_keys = []
-    key2file = {}
-    for fp in file_pointers:
-        try:
-            keys = list(fp.keys())
-            all_keys += keys
-            key2file.update({k: fp for k in keys})
-        except:
-            logger.info(f'failed to load {fp}')
-        
-    return all_keys, key2file
-
-def read_spk_scp(file):
+def read_scp(file):
     lines = open(file).read().split('\n')
-    spk2id = {l.split()[0]:int(l.split()[1]) for l in lines if l.startswith('id')}
-    return spk2id
-class H5AudioSet(Dataset):
+    keys = [l.split()[0] for l in lines if l.startswith('id')]
+    speakers = [l.split()[0].split('-')[0] for l in lines if l.startswith('id')]
+    files = [l.split()[1] for l in lines if l.startswith('id')]
+    return keys, speakers, files
+
+
+class Dataset(paddle.io.Dataset):
     """
     Dataset class for Audioset, with mel features stored in multiple hdf5 files.
     The h5 files store mel-spectrogram features pre-extracted from wav files.
     Use wav2mel.py to do feature extraction.
     """
-
     def __init__(self,
-                 h5_files,
-                 config,
-                 keys = None,
+                 scp,
+                 keys=None,
+                 sample_rate=16000,
+                 duration=None,
                  augment=True,
-                 training=True,
-                 balanced_sampling=True):
-        super(H5AudioSet, self).__init__()
-        self.h5_files = h5_files
-        self.config = config
-        self.file_pointers = [h5py.File(f) for f in h5_files]
-        self.all_keys, self.key2file = get_keys(self.file_pointers)
-        if keys is not None:
-            self.all_keys = list(set.intersection(set(self.all_keys),set(keys)))
-        n_class = len(set([k.split('-')[0] for k in self.all_keys]))
-        logger.info(f'Totally {len(self.all_keys)} keys and {n_class} classes listed')
+                 training=True):
+        #balanced_sampling=False):
+        super(Dataset, self).__init__()
+
+        self.keys, self.speakers, self.files = read_scp(scp)
+        self.key2file = {k: f for k, f in zip(self.keys, self.files)}
+        self.n_files = len(self.files)
+        self.speaker_set = list(set(self.speakers))
+        self.speaker_set.sort()
+        self.spk2cls = {s: i for i, s in enumerate(self.speaker_set)}
+        self.n_class = len(self.speaker_set)
+        logger.info(f'speaker size: {self.n_class}')
+        logger.info(f'file size: {self.n_files}')
         self.augment = augment
         self.training = training
-        self.balanced_sampling = balanced_sampling
-        logger.info(
-            f'{len(self.h5_files)} h5 files, totally {len(self.all_keys)} audio files listed'
-        )
-        self.key2clsidx = read_spk_scp(self.config['spk_scp'])
-        self.clsidx2key = {self.key2clsidx[k]:k for k in self.key2clsidx} 
+        self.sample_rate = sample_rate
+        #self.balanced_sampling = balanced_sampling
+        self.duration = duration
+        if augment:
+            assert duration, 'if augment is True, duration must not be None'
 
-    def _process(self, x):
-        assert x.shape[0] == self.config[
-            'mel_bins'], 'the first dimension must be mel frequency'
+        if self.duration:
+            self.duration = int(self.sample_rate * self.duration)
 
-        target_len = self.config['max_mel_len']
-        if x.shape[1] <= target_len:
-            pad_width = (target_len - x.shape[1]) // 2 + 1
-            x = np.pad(x, ((0, 0), (pad_width, pad_width)))
-        x = x[:, :target_len]
+        if isinstance(keys, list):
+            self.keys = keys
+        elif isinstance(keys, str):
+            with open(keys) as f:
+                self.keys = f.read().split('\n')
+                self.keys = [k for k in self.keys if k.startswith('id')]
 
-        if self.training and self.augment:
-            x = augment.random_crop2d(
-                x, self.config['mel_crop_len'], tempo_axis=1)
-            x = spect_permute(x, tempo_axis=1, nblocks=random_choice([0, 2, 3]))
-            aug_level = random_choice([0.2, 0.1, 0])
-            x = augment.adaptive_spect_augment(x, tempo_axis=1, level=aug_level)
-        #x = x[:,:self.config['mel_crop_len']] # should be center-crop
-        return x
+        logger.info(f'using {len(self.keys)} keys')
 
     def __getitem__(self, idx):
+        idx = idx % len(self.keys)
+        key = self.keys[idx]
+        spk = key.split('-')[0]
+        #spk = self.speakers[idx]
+        cls_idx = self.spk2cls[spk]
+        file = self.key2file[key]
 
-        if self.balanced_sampling:
-            cls_id = int(np.random.randint(0, self.config['num_classes']))
-            keys = self.clsidx2key[cls_id]
-            k = random_choice(keys)
-            cls_ids = self.key2clsidx[k]
-        else:
-            idx = idx % len(self.all_keys)
-            k = self.all_keys[idx]
-            cls_ids = self.key2clsidx[k]
-        fp = self.key2file[k]
-        x = fp[k][:, :]
-        x = self._process(x)
-        #prob = np.array(file2feature[k], 'float32')
+        #file = self.files[idx]
+        file_duration = None
+        if not self.augment and self.duration:
+            file_duration = self.duration
 
-        #y = np.zeros((self.config['num_classes'], ), 'float32')
-        #y[cls_ids] = 1.0
-        return x, cls_ids
+        while True:
+            try:
+                wav, _ = paddleaudio.load(file,
+                                          sr=self.sample_rate,
+                                          duration=file_duration)
+                break
+            except:
+                key = self.keys[idx]
+                spk = key.split('-')[0]
+                #spk = self.speakers[idx]
+                cls_idx = self.spk2cls[spk]
+                file = self.key2file[key]
+        if self.augment:
+            wav = paddleaudio.features.random_crop_or_pad1d(wav, self.duration)
+        elif self.duration:
+            wav = paddleaudio.features.center_crop_or_pad1d(wav, self.duration)
+
+        return wav, cls_idx
 
     def __len__(self):
-        return len(self.all_keys)
+        return len(self.keys)
 
 
 def worker_init(worker_id):
@@ -163,49 +161,33 @@ def worker_init(worker_id):
 
 
 def get_train_loader(config):
-    with open(config['train_keys']) as f:
-        train_keys = f.read().split('\n')
-
-    h5_files = glob.glob(config['data'])
-    train_dataset = H5AudioSet(
-        h5_files,
-        config,
-        keys = train_keys,
-        balanced_sampling=config['balanced_sampling'],
-        augment=True,
-        training=True)
-
-    train_loader = DataLoader(
-        train_dataset,
-        shuffle=True,
-        batch_size=config['batch_size'],
-        drop_last=True,
-        num_workers=config['num_workers'],
-        use_buffer_reader=True,
-        use_shared_memory=True,
-        worker_init_fn=worker_init)
+    dataset = Dataset(config['spk_scp'],
+                      keys=config['train_keys'],
+                      augment=True,
+                      duration=config['duration'])
+    train_loader = paddle.io.DataLoader(dataset,
+                                        shuffle=True,
+                                        batch_size=config['batch_size'],
+                                        drop_last=True,
+                                        num_workers=config['num_workers'],
+                                        use_buffer_reader=True,
+                                        use_shared_memory=True,
+                                        worker_init_fn=worker_init)
 
     return train_loader
 
 
 def get_val_loader(config):
 
-    with open(config['val_keys']) as f:
-        val_keys = f.read().split('\n')
-        
-    h5_files = glob.glob(config['data'])
-    val_dataset = H5AudioSet(
-        h5_files,
-         config,
-         keys = val_keys, 
-        balanced_sampling=False,
-         augment=False)
-    val_loader = DataLoader(
-        val_dataset,
-        shuffle=False,
-        batch_size=config['val_batch_size'],
-        drop_last=False,
-        num_workers=config['num_workers'])
+    dataset = Dataset(config['spk_scp'],
+                      keys=config['val_keys'],
+                      augment=False,
+                      duration=config['duration'])
+    val_loader = paddle.io.DataLoader(dataset,
+                                      shuffle=False,
+                                      batch_size=config['val_batch_size'],
+                                      drop_last=False,
+                                      num_workers=config['num_workers'])
 
     return val_loader
 
@@ -216,12 +198,11 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
 
     train_loader = get_train_loader(config)
-    import pdb;pdb.set_trace()
-    print(train_loader.dataset[0])
-   # for i,(x,y) in enumerate(train_loader):
-       # print(x.shape,y)
-  
-    # dataset = H5AudioSet(
-    #     [config['eval_h5']], config, balanced_sampling=False, augment=False)
-    # x, y, p = dataset[0]
-    # logger.info(f'{x.shape}, {y, p.shape}')
+    val_loader = get_val_loader(config)
+    for i, (x, y) in enumerate(train_loader()):
+        print(x, y)
+        break
+
+    for i, (x, y) in enumerate(val_loader()):
+        print(x, y)
+        break
