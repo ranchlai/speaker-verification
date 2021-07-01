@@ -95,10 +95,12 @@ class ResNetSE(nn.Layer):
         nn.initializer.XavierNormal(out)
         return out
 
-    def forward(self, x, augment=None):
+    def forward(self, x, augment_wav=None, augment_mel=None):
+        if augment_wav:
+            x = augment_wav(x)
         x = self.melspectrogram(x)
-        if augment:
-            x = augment(x)
+        if augment_mel:
+            x = augment_mel(x)
         x = x.unsqueeze(1)
 
         x = self.conv1(x)
