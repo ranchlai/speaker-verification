@@ -26,7 +26,7 @@ import yaml
 from paddle.optimizer import Adam
 from paddle.utils import download
 from paddleaudio.losses import AMSoftmaxLoss
-from paddleaudio.transforms import Compose, RandomMasking
+from paddleaudio.transforms import Compose, RandomMasking, RandomMuCodec
 from paddleaudio.utils.logging import get_logger
 from visualdl import LogWriter
 
@@ -90,8 +90,11 @@ if __name__ == '__main__':
     freq_masking = RandomMasking(max_mask_count=config['max_freq_mask'],
                                  max_mask_width=config['max_freq_mask_width'],
                                  axis=-2)
-    augment = Compose([freq_masking, time_masking])
-    print(augment)
+
+    augment_mel = Compose([freq_masking, time_masking])
+    print(augment_mel)
+    augment_wav = RandomMuCodec()
+    print(augment_wav)
 
     if args.restore != -1:
         model_dict, optim_dict = load_checkpoint(config['model_dir'],
@@ -115,7 +118,7 @@ if __name__ == '__main__':
 
     epoch_num = config['epoch_num']
     if args.restore != -1:
-        val_acc = evaluate(start_epoch, val_loader, model)
+        val_acc = evaluate(start_epoch, val_loader, model, loss_fn)
         best_acc = val_acc
         #log_writer.add_scalar(
         # tag="eval loss", step=args.restore, value=avg_loss)
@@ -132,17 +135,12 @@ if __name__ == '__main__':
         for batch_id, (xd, yd) in enumerate(train_loader()):
             if warm_steps != 0 and step < warm_steps:
                 optimizer.set_lr(lrs[step])
-            #print(yd)
-            #import pdb;pdb.set_trace()
-            logits = model(xd, augment)
+            logits = model(xd, augment_wav, augment_mel)
             loss, pred = loss_fn(logits, yd)
             loss.backward()
             optimizer.step()
             model.clear_gradients()
             acc = np.mean(np.argmax(pred.numpy(), axis=1) == yd.numpy())
-            #  if epoch >8:
-            # import pdb;pdb.set_trace()
-            # import pdb;pdb.set_trace()
             avg_loss = (avg_loss * batch_id + loss.numpy()[0]) / (1 + batch_id)
             avg_acc = (avg_acc * batch_id + acc) / (1 + batch_id)
             elapsed = (time.time() - t0) / 3600
@@ -168,7 +166,7 @@ if __name__ == '__main__':
                 fn = os.path.join(config['model_dir'],
                                   f'{prefix}_checkpoint_epoch{epoch}')
                 paddle.save(model.state_dict(), fn + '.pdparams')
-                paddle.save(optimizer.state_dict(), fn + '.ptopt')
+                paddle.save(optimizer.state_dict(), fn + '.pdopt')
 
             if step % config['eval_step'] == 0 and local_rank == 0:
 

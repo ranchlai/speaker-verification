@@ -16,6 +16,7 @@ import glob
 import json
 import os
 import pickle
+import random
 import subprocess
 import time
 import warnings
@@ -24,10 +25,11 @@ import h5py
 import numpy as np
 import paddle
 import paddleaudio
+import sox
 import yaml
 #from paddle.io import DataLoader, Dataset, IterableDataset
 from paddle.utils import download
-from paddleaudio import augment
+from paddleaudio.utils import augment
 from paddleaudio.utils.logging import get_logger
 
 logger = get_logger(__file__)
@@ -74,6 +76,16 @@ def read_scp(file):
     return keys, speakers, files
 
 
+def augment_by_sox(wav, sr):
+    tfm = sox.Transformer()
+    effects = ['compand', 'reverb', 'fade']  #'echo']
+    num_effets = random.randint(1, len(effects))
+    for e in random.sample(effects, num_effets):
+        tfm.__getattribute__(e)()
+    wav = tfm.build_array(input_array=wav, sample_rate_in=sr)
+    return wav
+
+
 class Dataset(paddle.io.Dataset):
     """
     Dataset class for Audioset, with mel features stored in multiple hdf5 files.
@@ -86,6 +98,9 @@ class Dataset(paddle.io.Dataset):
                  sample_rate=16000,
                  duration=None,
                  augment=True,
+                 speaker_set=None,
+                 augment_with_sox=True,
+                 augment_prob=0.2,
                  training=True):
         #balanced_sampling=False):
         super(Dataset, self).__init__()
@@ -93,13 +108,24 @@ class Dataset(paddle.io.Dataset):
         self.keys, self.speakers, self.files = read_scp(scp)
         self.key2file = {k: f for k, f in zip(self.keys, self.files)}
         self.n_files = len(self.files)
-        self.speaker_set = list(set(self.speakers))
-        self.speaker_set.sort()
+        if speaker_set:
+            if isinstance(speaker_set, str):
+                with open(speaker_set) as f:
+                    self.speaker_set = f.read().split('\n')
+            else:
+                self.speaker_set = speaker_set
+        else:
+            self.speaker_set = list(set(self.speakers))
+            self.speaker_set.sort()
+            # with open('../data/spaker_set.txt','wt') as f:
+            #     f.write('\n'.join(self.speaker_set))
         self.spk2cls = {s: i for i, s in enumerate(self.speaker_set)}
         self.n_class = len(self.speaker_set)
         logger.info(f'speaker size: {self.n_class}')
         logger.info(f'file size: {self.n_files}')
         self.augment = augment
+        self.augment_prob = augment_prob
+        self.augment_with_sox = augment_with_sox
         self.training = training
         self.sample_rate = sample_rate
         #self.balanced_sampling = balanced_sampling
@@ -134,9 +160,9 @@ class Dataset(paddle.io.Dataset):
 
         while True:
             try:
-                wav, _ = paddleaudio.load(file,
-                                          sr=self.sample_rate,
-                                          duration=file_duration)
+                wav, sr = paddleaudio.load(file,
+                                           sr=self.sample_rate,
+                                           duration=file_duration)
                 break
             except:
                 key = self.keys[idx]
@@ -148,6 +174,10 @@ class Dataset(paddle.io.Dataset):
             wav = paddleaudio.features.random_crop_or_pad1d(wav, self.duration)
         elif self.duration:
             wav = paddleaudio.features.center_crop_or_pad1d(wav, self.duration)
+
+        if self.augment_with_sox and random.random(
+        ) < self.augment_prob:  #sox augment
+            wav = augment_by_sox(wav, sr)
 
         return wav, cls_idx
 
@@ -163,7 +193,9 @@ def worker_init(worker_id):
 def get_train_loader(config):
     dataset = Dataset(config['spk_scp'],
                       keys=config['train_keys'],
+                      speaker_set=config['speaker_set'],
                       augment=True,
+                      augment_with_sox=config['augment_with_sox'],
                       duration=config['duration'])
     train_loader = paddle.io.DataLoader(dataset,
                                         shuffle=True,
@@ -181,7 +213,9 @@ def get_val_loader(config):
 
     dataset = Dataset(config['spk_scp'],
                       keys=config['val_keys'],
+                      speaker_set=config['speaker_set'],
                       augment=False,
+                      augment_with_sox=False,
                       duration=config['duration'])
     val_loader = paddle.io.DataLoader(dataset,
                                       shuffle=False,
