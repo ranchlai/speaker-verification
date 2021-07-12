@@ -35,45 +35,9 @@ from paddleaudio.utils.logging import get_logger
 logger = get_logger(__file__)
 
 
-def spect_permute(spect, tempo_axis, nblocks):
-    """spectrogram  permutaion"""
-    assert spect.ndim == 2, 'only supports 2d tensor or numpy array'
-    if tempo_axis == 0:
-        nt, nf = spect.shape
-    else:
-        nf, nt = spect.shape
-    if nblocks <= 1:
-        return spect
-
-    block_width = nt // nblocks + 1
-    if tempo_axis == 1:
-        blocks = [
-            spect[:, block_width * i:(i + 1) * block_width]
-            for i in range(nblocks)
-        ]
-        np.random.shuffle(blocks)
-        new_spect = np.concatenate(blocks, 1)
-    else:
-        blocks = [
-            spect[block_width * i:(i + 1) * block_width, :]
-            for i in range(nblocks)
-        ]
-        np.random.shuffle(blocks)
-        new_spect = np.concatenate(blocks, 0)
-    return new_spect
-
-
 def random_choice(a):
     i = np.random.randint(0, high=len(a))
     return a[int(i)]
-
-
-def read_scp(file):
-    lines = open(file).read().split('\n')
-    keys = [l.split()[0] for l in lines if l.startswith('id')]
-    speakers = [l.split()[0].split('-')[0] for l in lines if l.startswith('id')]
-    files = [l.split()[1] for l in lines if l.startswith('id')]
-    return keys, speakers, files
 
 
 def read_list(file):
@@ -87,6 +51,14 @@ def read_list(file):
     return keys, speakers, files
 
 
+def read_scp(file):
+    lines = open(file).read().split('\n')
+    keys = [l.split()[0] for l in lines if l.startswith('id')]
+    speakers = [l.split()[0].split('-')[0] for l in lines if l.startswith('id')]
+    files = [l.split()[1] for l in lines if l.startswith('id')]
+    return keys, speakers, files
+
+
 def augment_by_sox(wav, sr):
     tfm = sox.Transformer()
     effects = ['reverb', 'fade']  #'echo']'compand',
@@ -95,6 +67,9 @@ def augment_by_sox(wav, sr):
         tfm.__getattribute__(e)()
     wav = tfm.build_array(input_array=wav, sample_rate_in=sr)
     return wav
+
+
+from collections import defaultdict
 
 
 class Dataset(paddle.io.Dataset):
@@ -113,10 +88,13 @@ class Dataset(paddle.io.Dataset):
                  augment_with_sox=True,
                  augment_prob=0.2,
                  training=True,
-                 balanced_sampling=False):
+                 n_uttns=8):
         #):
         super(Dataset, self).__init__()
         self.keys, self.speakers, self.files = read_list(scp)
+        self.spk2files = defaultdict(list)
+        for s, f in zip(self.speakers, self.files):
+            self.spk2files[s].append(f)
         self.key2file = {k: f for k, f in zip(self.keys, self.files)}
         self.n_files = len(self.files)
         if speaker_set:
@@ -129,8 +107,8 @@ class Dataset(paddle.io.Dataset):
         else:
             self.speaker_set = list(set(self.speakers))
             self.speaker_set.sort()
-            with open('../data/spaker_set_vox12.txt', 'wt') as f:
-                f.write('\n'.join(self.speaker_set))
+            # with open('../data/spaker_set.txt','wt') as f:
+            #     f.write('\n'.join(self.speaker_set))
         self.spk2cls = {s: i for i, s in enumerate(self.speaker_set)}
         self.n_class = len(self.speaker_set)
         logger.info(f'speaker size: {self.n_class}')
@@ -140,30 +118,24 @@ class Dataset(paddle.io.Dataset):
         self.augment_with_sox = augment_with_sox
         self.training = training
         self.sample_rate = sample_rate
-        self.balanced_sampling = balanced_sampling
         self.duration = duration
+        self.n_uttns = n_uttns
         if augment:
             assert duration, 'if augment is True, duration must not be None'
 
         if self.duration:
             self.duration = int(self.sample_rate * self.duration)
-        if keys is not None:
-            if isinstance(keys, list):
-                self.keys = keys
-            elif isinstance(keys, str):
-                with open(keys) as f:
-                    self.keys = f.read().split('\n')
-                    self.keys = [k for k in self.keys if k.startswith('id')]
+
+        if isinstance(keys, list):
+            self.keys = keys
+        elif isinstance(keys, str):
+            with open(keys) as f:
+                self.keys = f.read().split('\n')
+                self.keys = [k for k in self.keys if k.startswith('id')]
 
         logger.info(f'using {len(self.keys)} keys')
 
-    def __getitem__(self, idx):
-        idx = idx % len(self.keys)
-        key = self.keys[idx]
-        spk = key.split('-')[0]
-        #spk = self.speakers[idx]
-        cls_idx = self.spk2cls[spk]
-        file = self.key2file[key]
+    def get_wav(self, file, spk_id):
         file_duration = None
         if not self.augment and self.duration:
             file_duration = self.duration
@@ -173,24 +145,38 @@ class Dataset(paddle.io.Dataset):
                                            sr=self.sample_rate,
                                            duration=file_duration)
                 break
-            except:
-                key = self.keys[idx]
-                spk = key.split('-')[0]
-                #spk = self.speakers[idx]
-                cls_idx = self.spk2cls[spk]
-                file = self.key2file[key]
-                print(f'error loading file {file}')
+            except:  #try another file
+                logger.info(f'error loading file {file}')
+                file = random_choice(self.spk2files[spk_id])
+                time.sleep(1.0)
         if self.augment:
             wav = augments.random_crop_or_pad1d(wav, self.duration)
         elif self.duration:
             wav = augments.center_crop_or_pad1d(wav, self.duration)
+
         if self.augment_with_sox and random.random(
         ) < self.augment_prob:  #sox augment
             wav = augment_by_sox(wav, sr)
-        return wav, cls_idx
+
+        return wav
+
+    def __getitem__(self, idx):
+        #choose a speaker
+        spk_id = self.speaker_set[np.random.randint(self.n_class)]
+        #print('idx:',idx)
+        #spk_id = self.speaker_set[idx % self.n_class]
+        # print('spk_id',spk_id)
+        wavs = []
+        for i in range(self.n_uttns):
+            file = random_choice(self.spk2files[spk_id])
+            wav = self.get_wav(file, spk_id)
+            wavs += [wav[None, :]]
+
+        wavs = np.concatenate(wavs, 0)
+        return wavs,
 
     def __len__(self):
-        return len(self.keys)
+        return len(self.keys) // self.n_uttns
 
 
 def worker_init(worker_id):
@@ -204,7 +190,8 @@ def get_train_loader(config):
                       speaker_set=config['speaker_set'],
                       augment=True,
                       augment_with_sox=config['augment_with_sox'],
-                      duration=config['duration'])
+                      duration=config['duration'],
+                      n_uttns=config['n_uttns'])
     train_loader = paddle.io.DataLoader(dataset,
                                         shuffle=True,
                                         batch_size=config['batch_size'],
@@ -224,7 +211,8 @@ def get_val_loader(config):
                       speaker_set=config['speaker_set'],
                       augment=False,
                       augment_with_sox=False,
-                      duration=config['duration'])
+                      duration=config['duration'],
+                      n_uttns=config['n_uttns'])
     val_loader = paddle.io.DataLoader(dataset,
                                       shuffle=False,
                                       batch_size=config['val_batch_size'],
@@ -238,12 +226,9 @@ if __name__ == '__main__':
     # do some testing here
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
-    train_loader = get_train_loader(config)
-    val_loader = get_val_loader(config)
-    for i, (x, y) in enumerate(train_loader()):
-        print(x, y)
-        break
 
-    for i, (x, y) in enumerate(val_loader()):
-        print(x, y)
+    train_loader = get_train_loader(config)
+    #val_loader = get_val_loader(config)
+    for i, (x, ) in enumerate(train_loader()):
+        print(x.shape)
         break

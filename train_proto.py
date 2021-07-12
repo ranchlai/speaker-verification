@@ -26,11 +26,11 @@ import paddle.nn.functional as F
 import yaml
 from paddle.optimizer import Adam
 from paddle.utils import download
-from paddleaudio.losses import AMSoftmaxLoss
-from paddleaudio.transforms import Compose, RandomMasking, RandomMuLawCodec
+from paddleaudio.losses import AMSoftmaxLoss, ProtoLoss
+from paddleaudio.transforms import Compose, RandomMasking, RandomMuCodec
 from paddleaudio.utils.logging import get_logger
 
-from dataset import get_train_loader, get_val_loader
+from balance_dataset import get_train_loader, get_val_loader
 from evaluate import evaluate
 from models import ResNetSE34, ResNetSE34V2
 from utils import MixUpLoss, load_checkpoint, mixup_data, save_checkpoint
@@ -77,9 +77,7 @@ if __name__ == '__main__':
     #loss_fn = nn.NLLLoss()
     warm_steps = config['warm_steps']
     if warm_steps != 0:
-        lrs = np.linspace(config['min_lr'], config['start_lr'], warm_steps)
-        loss_s = np.linspace(60, config['loss']['params']['s'], warm_steps)
-        loss_m = np.linspace(-0.01, config['loss']['params']['m'], warm_steps)
+        lrs = np.linspace(1e-10, config['start_lr'], warm_steps)
 
     params = model.parameters() + loss_fn.parameters()
     # params = model.parameters()
@@ -102,14 +100,16 @@ if __name__ == '__main__':
     else:
         augment_mel = None
     if config['augment_wav']:
-        augment_wav = RandomMuLawCodec()
+        augment_wav = RandomMuCodec()
         print(augment_wav)
     else:
         augment_wav = None
 
-#  scheduler = paddle.optimizer.lr.CosineAnnealingDecay(
-#learning_rate=config['start_lr'],
-#scheta_min=config['min_lr'],T_max=1000, verbose=False)
+    scheduler = paddle.optimizer.lr.CosineAnnealingDecay(
+        learning_rate=config['start_lr'],
+        eta_min=1e-7,
+        T_max=2000,
+        verbose=False)
 
     if args.restore != -1:
         # model_dict, optim_dict = load_checkpoint(config['model_dir'],
@@ -118,7 +118,7 @@ if __name__ == '__main__':
                           f'{prefix}_checkpoint_epoch{args.restore}.tar')
         ckpt = paddle.load(fn)
         model.load_dict(ckpt['model'])
-        optimizer = Adam(learning_rate=config['start_lr'], parameters=params)
+        optimizer = Adam(learning_rate=scheduler, parameters=params)
         opti_state_dict = ckpt['opti']
         opti_state_dict.update(
             {'LR_Scheduler': {
@@ -132,7 +132,8 @@ if __name__ == '__main__':
     else:
 
         start_epoch = 0
-        optimizer = Adam(learning_rate=config['start_lr'], parameters=params)
+        optimizer = Adam(learning_rate=scheduler, parameters=params)
+    optimizer._learning_rate = 1e-3
     #
     os.makedirs(config['model_dir'], exist_ok=True)
 
@@ -144,9 +145,8 @@ if __name__ == '__main__':
 
     epoch_num = config['epoch_num']
     if args.restore != -1:
-
-        result, min_dcf = compute_eer(config, model)
-        best_eer = result.eer
+        eer = evaluate(start_epoch, val_loader, model, loss_fn)
+        best_eer = eer
     else:
         best_eer = 1.0
     step = start_epoch * len(train_loader)
@@ -156,24 +156,24 @@ if __name__ == '__main__':
         model.train()
         model.clear_gradients()
         t0 = time.time()
-        for batch_id, (xd, yd) in enumerate(train_loader()):
+        for batch_id, (x, ) in enumerate(train_loader()):
             if warm_steps != 0 and step < warm_steps:
                 optimizer.set_lr(lrs[step])
-                loss_fn.s = loss_s[step]
-                loss_fn.m = loss_m[step]
-        # if step==warm_steps:
-        #logger.info(f'now using {scheduler}')
-        #optimizer._learning_rate = scheduler
+            if step == warm_steps:
+                logger.info(f'now using {scheduler}')
+                optimizer._learning_rate = scheduler
+            n_spk, n_uttn, _ = x.shape
 
-            logits = model(xd, augment_wav, augment_mel)
-            loss, pred = loss_fn(logits, yd)
+            x = x.reshape((n_spk * n_uttn, x.shape[-1]))
+            logits = model(x, augment_wav, augment_mel)
+            logits = logits.reshape((n_spk, n_uttn, logits.shape[-1]))
+            loss, pred = loss_fn(logits)
             loss.backward()
             optimizer.step()
-            # scheduler.step()
+            scheduler.step()
             model.clear_gradients()
-            optimizer.clear_gradients()
+            acc = np.mean(np.argmax(pred.numpy(), -1) == np.arange(n_spk))
 
-            acc = np.mean(np.argmax(pred.numpy(), axis=1) == yd.numpy())
             avg_loss = (avg_loss * batch_id + loss.numpy()[0]) / (1 + batch_id)
             avg_acc = (avg_acc * batch_id + acc) / (1 + batch_id)
             elapsed = (time.time() - t0) / 3600
@@ -204,8 +204,8 @@ if __name__ == '__main__':
                 paddle.save(obj, fn)
 
             if step % config['eval_step'] == 0 and local_rank == 0:
-
-                result, min_dcf = compute_eer(config, model)
+                result, min_dcf = compute_eer(config, model,
+                                              config['test_folder'])
                 eer = result.eer
                 model.train()
                 model.clear_gradients()
@@ -220,10 +220,10 @@ if __name__ == '__main__':
                 else:
                     logger.info(f'eer {eer} did not improved from {best_eer}')
 
-            if step % config['lr_dec_per_step'] == 0 and step != 0:
-                if optimizer.get_lr() <= 1e-6:
-                    factor = 0.95
-                else:
-                    factor = 0.8
-                optimizer.set_lr(optimizer.get_lr() * factor)
-                logger.info('decreased lr to {}'.format(optimizer.get_lr()))
+            # if step % config['lr_dec_per_step'] == 0 and step != 0:
+            #     if optimizer.get_lr() <= 1e-6:
+            #         factor = 0.95
+            #     else:
+            #         factor = 0.8
+            #     optimizer.set_lr(optimizer.get_lr() * factor)
+            #     logger.info('decreased lr to {}'.format(optimizer.get_lr()))

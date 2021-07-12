@@ -12,7 +12,7 @@ class ResNetSE(nn.Layer):
                  block,
                  layers,
                  num_filters,
-                 nOut,
+                 feature_dim,
                  feature_config,
                  encoder_type='SAP',
                  n_mels=40,
@@ -20,7 +20,7 @@ class ResNetSE(nn.Layer):
                  **kwargs):
         super(ResNetSE, self).__init__()
 
-        print('Embedding size is %d, encoder %s.' % (nOut, encoder_type))
+        print('Embedding size is %d, encoder %s.' % (feature_dim, encoder_type))
 
         self.inplanes = num_filters[0]
         self.encoder_type = encoder_type
@@ -66,7 +66,7 @@ class ResNetSE(nn.Layer):
         else:
             raise ValueError('Undefined encoder')
 
-        self.fc = nn.Linear(out_dim, nOut)
+        self.fc = nn.Linear(out_dim, feature_dim)
         self.melspectrogram = LogMelSpectrogram(**feature_config)
 
     def _make_layer(self, block, planes, blocks, stride=1):
@@ -131,10 +131,14 @@ class ResNetSE(nn.Layer):
         return x
 
 
-def ResNetSE34V2(nOut=256, **kwargs):
+def ResNetSE34V2(feature_dim=256, scale_factor=1, **kwargs):
     # Number of filters
-    num_filters = [32, 64, 128, 256]
-    model = ResNetSE(SEBasicBlock, [3, 4, 6, 3], num_filters, nOut, **kwargs)
+    num_filters = [
+        32 * scale_factor, 64 * scale_factor, 128 * scale_factor,
+        256 * scale_factor
+    ]
+    model = ResNetSE(SEBasicBlock, [3, 4, 6, 3], num_filters, feature_dim,
+                     **kwargs)
     return model
 
 

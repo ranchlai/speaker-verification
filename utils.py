@@ -51,7 +51,7 @@ def get_feature_from_url(url):
     return feature
 
 
-def save_checkpoint(model_dir, step, model, optimizer, prefix):
+def save_checkpoint(model_dir, step, model, optimizer, loss, prefix):
     print(f'checkpointing at step {step}')
     paddle.save(model.state_dict(),
                 model_dir + '/{}_checkpoint{}.pdparams'.format(prefix, step))

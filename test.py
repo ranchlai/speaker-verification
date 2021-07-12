@@ -45,21 +45,54 @@ def get_feature(file, model):
     return feature
 
 
+def compute_eer(config, model):
+    global file2feature
+    file2feature = {}
+    test_list = config['test_list']
+    test_folder = config['test_folder']
+    model.eval()
+    with open(test_list) as f:
+        lines = f.read().split('\n')
+    label_wav_pairs = [l.split() for l in lines if len(l) > 0]
+    logger.info(f'{len(label_wav_pairs)} test pairs listed')
+    labels = []
+    scores = []
+    for i, (label, f1, f2) in enumerate(label_wav_pairs):
+        full_path1 = os.path.join(test_folder, f1)
+        full_path2 = os.path.join(test_folder, f2)
+        feature1 = get_feature(full_path1, model)
+        feature2 = get_feature(full_path2, model)
+        score = float(paddle.dot(feature1.squeeze(), feature2.squeeze()))
+        labels.append(label)
+        scores.append(score)
+        if i % (len(label_wav_pairs) // 10) == 0:
+            logger.info(f'processed {i}|{len(label_wav_pairs)}')
+
+    scores = np.array(scores)
+    labels = np.array([int(l) for l in labels])
+    result = paddleaudio.metrics.compute_eer(scores, labels)
+    min_dcf = paddleaudio.metrics.compute_min_dcf(result.fr, result.fa)
+    logger.info(f'eer={result.eer}, thresh={result.thresh}, minDCF={min_dcf}')
+    return result, min_dcf
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config',
+    parser.add_argument('-c',
+                        '--config',
                         type=str,
                         required=False,
                         default='config.yaml')
     parser.add_argument(
+        '-d',
         '--device',
-        choices=['cpu', 'gpu'],
+        #choices=['cpu', 'gpu'],
         default="gpu",
         help="Select which device to train model, defaults to gpu.")
-    parser.add_argument('--weight', type=str, required=True)
-    parser.add_argument('--test_list', type=str, required=True)
-    parser.add_argument('--test_folder', type=str, required=True)
+    parser.add_argument('-w', '--weight', type=str, required=True)
+    # parser.add_argument('--test_list', type=str, required=True)
+    # parser.add_argument('--test_folder', type=str, required=True)
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -72,28 +105,11 @@ if __name__ == '__main__':
     ModelClass = eval(config['model']['name'])
     model = ModelClass(**config['model']['params'],
                        feature_config=config['fbank'])
+    state_dict = paddle.load(args.weight)
+    if 'model' in state_dict.keys():
+        state_dict = state_dict['model']
 
-    model.load_dict(paddle.load(args.weight))
+    model.load_dict(state_dict)
     model.eval()
-    with open(args.test_list) as f:
-        lines = f.read().split('\n')
-    label_wav_pairs = [l.split() for l in lines if len(l) > 0]
-    logger.info(f'{len(label_wav_pairs)} test pairs listed')
-    labels = []
-    scores = []
-    for i, (label, f1, f2) in enumerate(label_wav_pairs):
-        full_path1 = os.path.join(args.test_folder, f1)
-        full_path2 = os.path.join(args.test_folder, f2)
-        feature1 = get_feature(full_path1, model)
-        feature2 = get_feature(full_path2, model)
-        score = float(paddle.dot(feature1.squeeze(), feature2.squeeze()))
-        labels.append(label)
-        scores.append(score)
-        if i % (len(label_wav_pairs) // 100) == 0:
-            logger.info(f'processed {i}|{len(label_wav_pairs)}')
-
-    scores = np.array(scores)
-    labels = np.array([int(l) for l in labels])
-    result = paddleaudio.metrics.compute_eer(scores, labels)
-    min_dcf = paddleaudio.metrics.compute_min_dcf(result.fr, result.fa)
+    result, min_dcf = compute_eer(config, model)
     logger.info(f'eer={result.eer}, thresh={result.thresh}, minDCF={min_dcf}')
