@@ -22,7 +22,7 @@ import paddle.nn.functional as F
 import paddleaudio as pa
 import yaml
 from paddle.utils import download
-from paddleaudio.utils.logging import get_logger
+from paddleaudio.utils import get_logger
 
 from dataset import get_val_loader
 

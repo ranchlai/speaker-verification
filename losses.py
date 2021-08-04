@@ -13,6 +13,8 @@
 # limitations under the License.
 
 __all__ = ['ProtoTypical', 'AMSoftmaxLoss']
+import math
+
 import numpy as np
 import paddle
 import paddle.nn as nn
@@ -35,13 +37,13 @@ class AMSoftmaxLoss(nn.Layer):
                  feature_dim: int,
                  n_classes: int,
                  eps: float = 1e-5,
-                 m: float = 0.3,
-                 s: float = 30.0):
+                 margin: float = 0.3,
+                 scale: float = 30.0):
         super(AMSoftmaxLoss, self).__init__()
         self.w = paddle.create_parameter((feature_dim, n_classes), 'float32')
         self.eps = eps
-        self.s = s
-        self.m = m
+        self.scale = scale
+        self.margin = margin
         self.nll_loss = nn.NLLLoss()
         self.n_classes = n_classes
 
@@ -51,8 +53,8 @@ class AMSoftmaxLoss(nn.Layer):
         cosine = paddle.matmul(logits, wn)
         y = paddle.zeros((logits.shape[0], self.n_classes))
         for i in range(logits.shape[0]):
-            y[i, label[i]] = self.m
-        pred = F.log_softmax((cosine - y) * self.s, -1)
+            y[i, label[i]] = self.margin
+        pred = F.log_softmax((cosine - y) * self.scale, -1)
         return self.nll_loss(pred, label), pred
 
 
@@ -75,6 +77,8 @@ class ProtoTypical(nn.Layer):
             f'the input logits must be a ' +
             f'3d tensor of shape [n_spk,n_uttns,emb_dim],' +
             f'but received logits.ndim = {logits.ndim}')
+        import pdb
+        pdb.set_trace()
 
         logits = F.normalize(logits, p=2, axis=-1, epsilon=self.eps)
         proto = paddle.mean(logits[:, 1:, :], axis=1, keepdim=False).transpose(
@@ -84,6 +88,75 @@ class ProtoTypical(nn.Layer):
         label = paddle.arange(0, similarity.shape[0])
         log_sim = F.log_softmax(similarity, -1)
         return self.nll_loss(log_sim, label), log_sim
+
+
+class AngularMargin(nn.Layer):
+    def __init__(self, margin=0.0, scale=1.0):
+        super(AngularMargin, self).__init__()
+        self.margin = margin
+        self.scale = scale
+
+    def forward(self, outputs, targets):
+        outputs = outputs - self.margin * targets
+        return self.scale * outputs
+
+
+class LogSoftmaxWrapper(nn.Layer):
+    def __init__(self, loss_fn):
+        super(LogSoftmaxWrapper, self).__init__()
+        self.loss_fn = loss_fn
+        self.criterion = paddle.nn.KLDivLoss(reduction="sum")
+
+    def forward(self, outputs, targets, length=None):
+        targets = F.one_hot(targets, outputs.shape[1])
+        try:
+            predictions = self.loss_fn(outputs, targets)
+        except TypeError:
+            predictions = self.loss_fn(outputs)
+
+        predictions = F.log_softmax(predictions, axis=1)
+        loss = self.criterion(predictions, targets) / targets.sum()
+        return loss
+
+
+class AdditiveAngularMargin(AngularMargin):
+    def __init__(self,
+                 margin=0.0,
+                 scale=1.0,
+                 feature_dim=256,
+                 n_classes=1000,
+                 easy_margin=False):
+        super(AdditiveAngularMargin, self).__init__(margin, scale)
+        self.easy_margin = easy_margin
+        self.w = paddle.create_parameter((feature_dim, n_classes), 'float32')
+        self.cos_m = math.cos(self.margin)
+        self.sin_m = math.sin(self.margin)
+        self.th = math.cos(math.pi - self.margin)
+        self.mm = math.sin(math.pi - self.margin) * self.margin
+        self.nll_loss = nn.NLLLoss()
+        self.n_classes = n_classes
+
+    #  self.drop = nn.Dropout(0.1)
+
+    def forward(self, logits, targets):
+        # logits = self.drop(logits)
+        logits = F.normalize(logits, p=2, axis=1, epsilon=1e-8)
+        wn = F.normalize(self.w, p=2, axis=0, epsilon=1e-8)
+        cosine = logits @ wn
+
+        #cosine = outputs.astype('float32')
+        sine = paddle.sqrt(1.0 - paddle.square(cosine))
+        phi = cosine * self.cos_m - sine * self.sin_m  # cos(theta + m)
+        if self.easy_margin:
+            phi = paddle.where(cosine > 0, phi, cosine)
+        else:
+            phi = paddle.where(cosine > self.th, phi, cosine - self.mm)
+        target_one_hot = F.one_hot(targets, self.n_classes)
+        outputs = (target_one_hot * phi) + ((1.0 - target_one_hot) * cosine)
+        outputs = self.scale * outputs
+        pred = F.log_softmax(outputs, axis=-1)
+
+        return self.nll_loss(pred, targets), pred
 
 
 if __name__ == '__main__':

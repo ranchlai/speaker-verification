@@ -29,8 +29,7 @@ import sox
 import yaml
 #from paddle.io import DataLoader, Dataset, IterableDataset
 from paddle.utils import download
-from paddleaudio.utils import augments
-from paddleaudio.utils.logging import get_logger
+from paddleaudio.utils import augments, get_logger
 
 logger = get_logger(__file__)
 
@@ -111,7 +110,7 @@ class Dataset(paddle.io.Dataset):
                  augment=True,
                  speaker_set=None,
                  augment_with_sox=True,
-                 augment_prob=0.2,
+                 augment_prob=0.5,
                  training=True,
                  balanced_sampling=False):
         #):
@@ -129,7 +128,7 @@ class Dataset(paddle.io.Dataset):
         else:
             self.speaker_set = list(set(self.speakers))
             self.speaker_set.sort()
-            with open('../data/spaker_set_vox12.txt', 'wt') as f:
+            with open('../data/speaker_set_vox12.txt', 'wt') as f:
                 f.write('\n'.join(self.speaker_set))
         self.spk2cls = {s: i for i, s in enumerate(self.speaker_set)}
         self.n_class = len(self.speaker_set)
@@ -158,10 +157,10 @@ class Dataset(paddle.io.Dataset):
         logger.info(f'using {len(self.keys)} keys')
 
     def __getitem__(self, idx):
+        #print(f'dataset idx: {idx}')
         idx = idx % len(self.keys)
         key = self.keys[idx]
         spk = key.split('-')[0]
-        #spk = self.speakers[idx]
         cls_idx = self.spk2cls[spk]
         file = self.key2file[key]
         file_duration = None
@@ -180,6 +179,16 @@ class Dataset(paddle.io.Dataset):
                 cls_idx = self.spk2cls[spk]
                 file = self.key2file[key]
                 print(f'error loading file {file}')
+        speed = random.choice([0, 1, 2])
+        if speed == 1:
+            wav = paddleaudio.resample(wav, 16000, 16000 * 0.9)
+            cls_idx = cls_idx * 3 + 1
+        elif speed == 2:
+            wav = paddleaudio.resample(wav, 16000, 16000 * 1.1)
+            cls_idx = cls_idx * 3 + 2
+        else:
+            cls_idx = cls_idx * 3
+
         if self.augment:
             wav = augments.random_crop_or_pad1d(wav, self.duration)
         elif self.duration:
@@ -187,6 +196,7 @@ class Dataset(paddle.io.Dataset):
         if self.augment_with_sox and random.random(
         ) < self.augment_prob:  #sox augment
             wav = augment_by_sox(wav, sr)
+
         return wav, cls_idx
 
     def __len__(self):
@@ -195,16 +205,30 @@ class Dataset(paddle.io.Dataset):
 
 def worker_init(worker_id):
     time.sleep(worker_id / 32)
-    np.random.seed(int(time.time()) % 100 + worker_id)
+    seed = int(time.time()) % 10000 + worker_id
+    #  logger.info(f'seed={seed}')
+    np.random.seed(seed)
+    random.seed(seed)
+    paddle.seed(seed)
 
 
 def get_train_loader(config):
+
     dataset = Dataset(config['spk_scp'],
                       keys=config['train_keys'],
                       speaker_set=config['speaker_set'],
                       augment=True,
                       augment_with_sox=config['augment_with_sox'],
                       duration=config['duration'])
+
+    # train_sampler = paddle.io.DistributedBatchSampler(
+    # dataset, batch_size=config['batch_size'], shuffle=True, drop_last=True)
+
+    # train_loader = paddle.io.DataLoader(dataset,
+    #                                    batch_sampler = train_sampler,
+    #                                     num_workers=config['num_workers'],
+    #                                     worker_init_fn=worker_init)
+
     train_loader = paddle.io.DataLoader(dataset,
                                         shuffle=True,
                                         batch_size=config['batch_size'],
@@ -239,11 +263,11 @@ if __name__ == '__main__':
     with open('config.yaml') as f:
         config = yaml.safe_load(f)
     train_loader = get_train_loader(config)
-    val_loader = get_val_loader(config)
+    # val_loader = get_val_loader(config)
     for i, (x, y) in enumerate(train_loader()):
         print(x, y)
         break
 
-    for i, (x, y) in enumerate(val_loader()):
-        print(x, y)
-        break
+    # for i, (x, y) in enumerate(val_loader()):
+    #     print(x, y)
+    #     break

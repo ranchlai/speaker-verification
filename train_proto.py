@@ -26,12 +26,12 @@ import paddle.nn.functional as F
 import yaml
 from paddle.optimizer import Adam
 from paddle.utils import download
-from paddleaudio.losses import AMSoftmaxLoss, ProtoLoss
 from paddleaudio.transforms import Compose, RandomMasking, RandomMuCodec
 from paddleaudio.utils.logging import get_logger
 
 from balance_dataset import get_train_loader, get_val_loader
 from evaluate import evaluate
+from losses import AMSoftmaxLoss, ProtoTypical
 from models import ResNetSE34, ResNetSE34V2
 from utils import MixUpLoss, load_checkpoint, mixup_data, save_checkpoint
 

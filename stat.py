@@ -49,20 +49,6 @@ def get_lr(step, base_lr, max_lr, half_cycle=5000, reverse=False):
     return lr
 
 
-class Normalize2:
-    def __init__(self, mean_file, eps=1e-5):
-        self.eps = eps
-        mean = paddle.load(mean_file)['mean']
-        std = paddle.load(mean_file)['std']
-
-        self.mean = mean.unsqueeze((0, 2))
-        #self.std = std.unsqueeze((0,2))+eps
-
-    def __call__(self, x):
-        assert x.ndim == 3
-        return x - self.mean
-
-
 class Normalize:
     def __init__(self, eps=1e-5):
         self.eps = eps
@@ -83,7 +69,6 @@ if __name__ == '__main__':
         default="gpu",
         help="Select which device to train model, defaults to gpu.")
     parser.add_argument('-r', '--restore', type=int, required=False, default=-1)
-    parser.add_argument('-w', '--weight', type=str, required=False, default='')
     parser.add_argument('-c', '--config', type=str, required=True)
     parser.add_argument('-e',
                         '--eval_at_begin',
@@ -162,12 +147,12 @@ if __name__ == '__main__':
         random_rir_reader = RIRSource(rir_files, random=True, sample_rate=16000)
         reverb = Reverberate(rir_source=random_rir_reader)
         muse_augment = RandomChoice([noisify1, noisify2, noisify3])
-        wav_augments = RandomApply([muse_augment, reverb], 0.25)
+        wav_augments = RandomApply([muse_augment, reverb])
         transforms += [wav_augments]
     melspectrogram = LogMelSpectrogram(**config['fbank'])
     transforms += [melspectrogram]
     if config['normalize']:
-        transforms += [Normalize2(config['mean_std_file'])]
+        transforms += [Normalize()]
 
     if config['augment_mel']:
         #define spectrogram masking
@@ -186,7 +171,6 @@ if __name__ == '__main__':
     print(transforms)
 
     if args.restore != -1:
-        logger.info(f'restoring from checkpoint {args.restore}')
         fn = os.path.join(config['model_dir'],
                           f'{prefix}_checkpoint_epoch{args.restore}.tar')
         ckpt = paddle.load(fn)
@@ -199,21 +183,6 @@ if __name__ == '__main__':
     else:
         start_epoch = 0
         optimizer = Adam(learning_rate=config['max_lr'], parameters=params)
-
-    if args.weight != '':
-        logger.info(f'loading weight {args.weight}')
-        sd = paddle.load(args.weight)
-        model.load_dict(sd)
-
-    def freeze_bn(layer):
-        if isinstance(layer, paddle.nn.BatchNorm1D):
-            layer._momentum = 0.99
-            print(layer._momentum)
-        if isinstance(layer, paddle.nn.BatchNorm2D):
-            layer._momentum = 0.99
-            print(layer._momentum)
-
-    model.apply(freeze_bn)
     os.makedirs(config['model_dir'], exist_ok=True)
 
     if args.distributed:
@@ -228,82 +197,21 @@ if __name__ == '__main__':
     else:
         best_eer = 1.0
     step = start_epoch * len(train_loader)
-    for epoch in range(start_epoch, epoch_num):
-        # seed = int(time.time()%1000*(local_rank+1)+time.time()%100)+epoch
-        # np.random.seed(seed)
-        # random.seed(seed)
-        # paddle.seed(seed)
-        avg_loss = 0.0
-        avg_acc = 0.0
-        model.train()
-        model.clear_gradients()
-        t0 = time.time()
-        for batch_id, (x, y) in enumerate(train_loader()):
-            #print(f'batchid: {batch_id},idx {int(idx)}')
-            #jkld;fasfd
-            #  if config['max_lr'] > config['base_lr']:
-            #  lr = get_lr(step,config['base_lr'],config['max_lr'],config['half_cycle'],config['reverse_lr'])
-            #  optimizer.set_lr(lr)
-            x_mel = transforms(x)
-            # import pdb;pdb.set_trace()
-            logits = model(x_mel)
-            loss, pred = loss_fn(logits, y)
-            loss.backward()
-            optimizer.step()
-            model.clear_gradients()
-            optimizer.clear_gradients()
+    avg_mean = paddle.zeros((80, ))
+    avg_std = paddle.zeros((80, ))
 
-            acc = np.mean(np.argmax(pred.numpy(), axis=1) == y.numpy())
-            if batch_id < 100:
-                avg_acc = acc
-                avg_loss = loss.numpy()[0]
-            else:
-                factor = 0.999
-                avg_acc = avg_acc * factor + acc * (1 - factor)
-                avg_loss = avg_loss * factor + loss.numpy()[0] * (1 - factor)
+    for batch_id, (x, y) in enumerate(train_loader()):
+        x = transforms(x)
 
-            #(avg_acc * batch_id + acc) / (1 + batch_id)
-            elapsed = (time.time() - t0) / 3600
-            remain = elapsed / (1 + batch_id) * (len(train_loader) - batch_id)
+        mean = paddle.mean(x, [0, 2])
+        avg_mean = (avg_mean * batch_id + mean) / (batch_id + 1)
+        std = paddle.mean(x, [0, 2])
+        avg_std = (avg_std * batch_id + std) / (batch_id + 1)
+        if batch_id % 100 == 0:
+            logger.info(f'{batch_id}|{len(train_loader())}')
 
-            msg = f'epoch:{epoch}, batch:{batch_id}'
-            msg += f'|{len(train_loader)}'
-            msg += f', loss:{avg_loss:.3}'
-            msg += f', acc:{avg_acc:.3}'
-            msg += f', lr:{optimizer.get_lr():.2}'
-            msg += f', elapsed:{elapsed:.3}h'
-            msg += f', remained:{remain:.3}h'
+        if batch_id % 1000 == 0:
+            logger.info(f'mean {avg_mean.numpy()}')
+            logger.info(f'std {avg_std.numpy()}')
 
-            if batch_id % config['log_step'] == 0 and local_rank == 0:
-                logger.info(msg)
-
-            if step % config['checkpoint_step'] == 0 and local_rank == 0:
-                fn = os.path.join(config['model_dir'],
-                                  f'{prefix}_checkpoint_epoch{epoch}.tar')
-
-                obj = {
-                    'model': model.state_dict(),
-                    'loss': loss_fn.state_dict(),
-                    'opti': optimizer.state_dict(),
-                    'lr': optimizer.get_lr()
-                }
-                paddle.save(obj, fn)
-
-            if step != 0 and step % config['eval_step'] == 0 and local_rank == 0:
-
-                result, min_dcf = compute_eer(config, model)
-                eer = result.eer
-                model.train()
-                model.clear_gradients()
-
-                if eer < best_eer:
-                    logger.info('eer improved from {} to {}'.format(
-                        best_eer, eer))
-                    best_eer = eer
-                    fn = os.path.join(config['model_dir'],
-                                      f'{prefix}_epoch{epoch}_eer{eer:.3}')
-                    paddle.save(model.state_dict(), fn + '.pdparams')
-                else:
-                    logger.info(f'eer {eer} did not improve from {best_eer}')
-
-            step += 1
+            paddle.save({'mean': avg_mean, 'std': avg_std}, 'stat.pd')

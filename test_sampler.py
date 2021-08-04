@@ -83,7 +83,6 @@ if __name__ == '__main__':
         default="gpu",
         help="Select which device to train model, defaults to gpu.")
     parser.add_argument('-r', '--restore', type=int, required=False, default=-1)
-    parser.add_argument('-w', '--weight', type=str, required=False, default='')
     parser.add_argument('-c', '--config', type=str, required=True)
     parser.add_argument('-e',
                         '--eval_at_begin',
@@ -162,7 +161,7 @@ if __name__ == '__main__':
         random_rir_reader = RIRSource(rir_files, random=True, sample_rate=16000)
         reverb = Reverberate(rir_source=random_rir_reader)
         muse_augment = RandomChoice([noisify1, noisify2, noisify3])
-        wav_augments = RandomApply([muse_augment, reverb], 0.25)
+        wav_augments = RandomApply([muse_augment, reverb])
         transforms += [wav_augments]
     melspectrogram = LogMelSpectrogram(**config['fbank'])
     transforms += [melspectrogram]
@@ -186,7 +185,6 @@ if __name__ == '__main__':
     print(transforms)
 
     if args.restore != -1:
-        logger.info(f'restoring from checkpoint {args.restore}')
         fn = os.path.join(config['model_dir'],
                           f'{prefix}_checkpoint_epoch{args.restore}.tar')
         ckpt = paddle.load(fn)
@@ -199,21 +197,6 @@ if __name__ == '__main__':
     else:
         start_epoch = 0
         optimizer = Adam(learning_rate=config['max_lr'], parameters=params)
-
-    if args.weight != '':
-        logger.info(f'loading weight {args.weight}')
-        sd = paddle.load(args.weight)
-        model.load_dict(sd)
-
-    def freeze_bn(layer):
-        if isinstance(layer, paddle.nn.BatchNorm1D):
-            layer._momentum = 0.99
-            print(layer._momentum)
-        if isinstance(layer, paddle.nn.BatchNorm2D):
-            layer._momentum = 0.99
-            print(layer._momentum)
-
-    model.apply(freeze_bn)
     os.makedirs(config['model_dir'], exist_ok=True)
 
     if args.distributed:
@@ -238,29 +221,29 @@ if __name__ == '__main__':
         model.train()
         model.clear_gradients()
         t0 = time.time()
-        for batch_id, (x, y) in enumerate(train_loader()):
-            #print(f'batchid: {batch_id},idx {int(idx)}')
+        for batch_id, (x, y, idx) in enumerate(train_loader()):
+            logger.info(f'batchid: {batch_id},idx {idx.numpy()}')
+            continue
             #jkld;fasfd
-            #  if config['max_lr'] > config['base_lr']:
-            #  lr = get_lr(step,config['base_lr'],config['max_lr'],config['half_cycle'],config['reverse_lr'])
-            #  optimizer.set_lr(lr)
+            lr = get_lr(step, config['base_lr'], config['max_lr'],
+                        config['half_cycle'], config['reverse_lr'])
+            optimizer.set_lr(lr)
             x_mel = transforms(x)
-            # import pdb;pdb.set_trace()
             logits = model(x_mel)
             loss, pred = loss_fn(logits, y)
             loss.backward()
             optimizer.step()
+            # scheduler.step()
             model.clear_gradients()
             optimizer.clear_gradients()
 
             acc = np.mean(np.argmax(pred.numpy(), axis=1) == y.numpy())
-            if batch_id < 100:
+            if batch_id == 0:
                 avg_acc = acc
                 avg_loss = loss.numpy()[0]
             else:
-                factor = 0.999
-                avg_acc = avg_acc * factor + acc * (1 - factor)
-                avg_loss = avg_loss * factor + loss.numpy()[0] * (1 - factor)
+                avg_acc = avg_acc * 0.95 + acc * 0.05
+                avg_loss = avg_loss * 0.95 + loss.numpy()[0] * 0.05
 
             #(avg_acc * batch_id + acc) / (1 + batch_id)
             elapsed = (time.time() - t0) / 3600
