@@ -34,7 +34,8 @@ from dataset import get_train_loader
 from evaluate import evaluate
 from losses import AdditiveAngularMargin, AMSoftmaxLoss
 from models import *
-from utils import MixUpLoss, load_checkpoint, mixup_data, save_checkpoint
+from utils import (MixUpLoss, NoiseSource, RIRSource, load_checkpoint,
+                   mixup_data, save_checkpoint)
 
 
 def get_lr(step, base_lr, max_lr, half_cycle=5000, reverse=False):
@@ -74,8 +75,17 @@ class Normalize:
         return (x - mean) / (std + self.eps)
 
 
+def freeze_bn(layer):
+    if isinstance(layer, paddle.nn.BatchNorm1D):
+        layer._momentum = 0.8
+        print(layer._momentum)
+    if isinstance(layer, paddle.nn.BatchNorm2D):
+        layer._momentum = 0.8
+        print(layer._momentum)
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Audioset training')
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         '-d',
         '--device',
@@ -205,15 +215,8 @@ if __name__ == '__main__':
         sd = paddle.load(args.weight)
         model.load_dict(sd)
 
-    def freeze_bn(layer):
-        if isinstance(layer, paddle.nn.BatchNorm1D):
-            layer._momentum = 0.99
-            print(layer._momentum)
-        if isinstance(layer, paddle.nn.BatchNorm2D):
-            layer._momentum = 0.99
-            print(layer._momentum)
-
-    model.apply(freeze_bn)
+# if config['freeze_bn']:
+# model.apply(freeze_bn)
     os.makedirs(config['model_dir'], exist_ok=True)
 
     if args.distributed:

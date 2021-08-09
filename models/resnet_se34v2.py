@@ -1,3 +1,4 @@
+import numpy as np
 import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
@@ -13,7 +14,6 @@ class ResNetSE(nn.Layer):
                  layers,
                  num_filters,
                  feature_dim,
-                 feature_config,
                  encoder_type='SAP',
                  n_mels=40,
                  log_input=True,
@@ -67,7 +67,6 @@ class ResNetSE(nn.Layer):
             raise ValueError('Undefined encoder')
 
         self.fc = nn.Linear(out_dim, feature_dim)
-        self.melspectrogram = LogMelSpectrogram(**feature_config)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -95,14 +94,8 @@ class ResNetSE(nn.Layer):
         nn.initializer.XavierNormal(out)
         return out
 
-    def forward(self, x, augment_wav=None, augment_mel=None):
-        if augment_wav:
-            x = augment_wav(x)
-        x = self.melspectrogram(x)
-        if augment_mel:
-            x = augment_mel(x)
+    def forward(self, x):
         x = x.unsqueeze(1)
-
         x = self.conv1(x)
         x = self.relu(x)
         x = self.bn1(x)

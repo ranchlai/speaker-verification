@@ -52,6 +52,8 @@ def get_feature(file, model, melspectrogram):
     s, _ = paddleaudio.load(file, sr=16000)
     s = paddle.to_tensor(s[None, :])
     s = melspectrogram(s).astype('float32')
+    #import pdb;pdb.set_trace()
+    #s = s[:,:,:400]
     with paddle.no_grad():
         feature = model(s).squeeze()
     feature = feature / paddle.sqrt(paddle.sum(feature**2))
