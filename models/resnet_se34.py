@@ -97,12 +97,13 @@ class ResNetSE(nn.Layer):
         nn.initializer.XavierNormal(out)
         return out
 
-    def forward(self, x, augment_wav=None, augment_mel=None):
-        if augment_wav:
+    def forward(self, x, augment_wav=None, augment_mel=None, augment_prob=0.5):
+        if augment_wav and np.random.rand(1, ) < augment_prob:
             x = augment_wav(x)
         x = self.melspectrogram(x)
-        if augment_mel:
+        if augment_mel and np.random.rand(1, ) < augment_prob:
             x = augment_mel(x)
+
         x = x.unsqueeze(1)
         x = self.conv1(x)
         x = self.relu(x)

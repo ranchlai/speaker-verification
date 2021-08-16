@@ -25,14 +25,14 @@ import paddle.distributed as dist
 import paddle.nn as nn
 import paddle.nn.functional as F
 import yaml
-from paddle.optimizer import Adam
+from paddle.optimizer import SGD, Adam
 from paddle.utils import download
 from paddleaudio.transforms import *
 from paddleaudio.utils import get_logger
 
 from dataset import get_train_loader
 from evaluate import evaluate
-from losses import AdditiveAngularMargin, AMSoftmaxLoss
+from losses import AdditiveAngularMargin, AMSoftmaxLoss, CMSoftmax
 from models import *
 from utils import (MixUpLoss, NoiseSource, RIRSource, load_checkpoint,
                    mixup_data, save_checkpoint)
@@ -134,7 +134,6 @@ if __name__ == '__main__':
 
     loss_fn = LossClass(**config['loss']['params'])
     loss_fn.train()
-    #loss_fn = nn.NLLLoss()
     params = model.parameters() + loss_fn.parameters()
 
     transforms = []
@@ -203,8 +202,15 @@ if __name__ == '__main__':
         model.load_dict(ckpt['model'])
         optimizer = Adam(learning_rate=config['max_lr'], parameters=params)
         opti_state_dict = ckpt['opti']
-        optimizer.set_state_dict(opti_state_dict)
-        loss_fn.load_dict(ckpt['loss'])
+        try:
+            optimizer.set_state_dict(opti_state_dict)
+        except:
+            logger.error('failed to load state dict for optimizers')
+        try:
+            loss_fn.load_dict(ckpt['loss'])
+        except:
+            logger.error('failed to load state dict for loss')
+
         start_epoch = args.restore + 1
     else:
         start_epoch = 0
@@ -215,8 +221,6 @@ if __name__ == '__main__':
         sd = paddle.load(args.weight)
         model.load_dict(sd)
 
-# if config['freeze_bn']:
-# model.apply(freeze_bn)
     os.makedirs(config['model_dir'], exist_ok=True)
 
     if args.distributed:
@@ -231,6 +235,14 @@ if __name__ == '__main__':
     else:
         best_eer = 1.0
     step = start_epoch * len(train_loader)
+
+    if config.get('freeze_param', None):
+        for p in list(model.parameters())[:config['freezed_layers']]:
+            if not isinstance(p, nn.BatchNorm1D):
+                p.stop_gradient = True
+            if not isinstance(p, nn.BatchNorm1D):
+                p.stop_gradient = True
+
     for epoch in range(start_epoch, epoch_num):
         # seed = int(time.time()%1000*(local_rank+1)+time.time()%100)+epoch
         # np.random.seed(seed)
@@ -241,14 +253,16 @@ if __name__ == '__main__':
         model.train()
         model.clear_gradients()
         t0 = time.time()
+        if config['max_lr'] > config['base_lr']:
+            lr = get_lr(epoch - start_epoch, config['base_lr'],
+                        config['max_lr'], config['half_cycle'],
+                        config['reverse_lr'])
+            optimizer.set_lr(lr)
+            logger.info(f'Setting lr to {lr}')
+
         for batch_id, (x, y) in enumerate(train_loader()):
-            #print(f'batchid: {batch_id},idx {int(idx)}')
-            #jkld;fasfd
-            #  if config['max_lr'] > config['base_lr']:
-            #  lr = get_lr(step,config['base_lr'],config['max_lr'],config['half_cycle'],config['reverse_lr'])
-            #  optimizer.set_lr(lr)
+
             x_mel = transforms(x)
-            # import pdb;pdb.set_trace()
             logits = model(x_mel)
             loss, pred = loss_fn(logits, y)
             loss.backward()
@@ -265,7 +279,6 @@ if __name__ == '__main__':
                 avg_acc = avg_acc * factor + acc * (1 - factor)
                 avg_loss = avg_loss * factor + loss.numpy()[0] * (1 - factor)
 
-            #(avg_acc * batch_id + acc) / (1 + batch_id)
             elapsed = (time.time() - t0) / 3600
             remain = elapsed / (1 + batch_id) * (len(train_loader) - batch_id)
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__all__ = ['ProtoTypical', 'AMSoftmaxLoss']
+__all__ = ['ProtoTypical', 'AMSoftmaxLoss', 'CMSoftmax']
 import math
 
 import numpy as np
@@ -153,6 +153,49 @@ class AdditiveAngularMargin(AngularMargin):
             phi = paddle.where(cosine > self.th, phi, cosine - self.mm)
         target_one_hot = F.one_hot(targets, self.n_classes)
         outputs = (target_one_hot * phi) + ((1.0 - target_one_hot) * cosine)
+        outputs = self.scale * outputs
+        pred = F.log_softmax(outputs, axis=-1)
+
+        return self.nll_loss(pred, targets), pred
+
+
+class CMSoftmax(AngularMargin):
+    def __init__(self,
+                 margin=0.0,
+                 margin2=0.0,
+                 scale=1.0,
+                 feature_dim=256,
+                 n_classes=1000,
+                 easy_margin=False):
+        super(CMSoftmax, self).__init__(margin, scale)
+        self.easy_margin = easy_margin
+        self.w = paddle.create_parameter((feature_dim, n_classes), 'float32')
+        self.cos_m = math.cos(self.margin)
+        self.sin_m = math.sin(self.margin)
+        self.th = math.cos(math.pi - self.margin)
+        self.mm = math.sin(math.pi - self.margin) * self.margin
+        self.nll_loss = nn.NLLLoss()
+        self.n_classes = n_classes
+        self.margin2 = margin2
+
+    #  self.drop = nn.Dropout(0.1)
+
+    def forward(self, logits, targets):
+        # logits = self.drop(logits)
+        logits = F.normalize(logits, p=2, axis=1, epsilon=1e-8)
+        wn = F.normalize(self.w, p=2, axis=0, epsilon=1e-8)
+        cosine = logits @ wn
+
+        #cosine = outputs.astype('float32')
+        sine = paddle.sqrt(1.0 - paddle.square(cosine))
+        phi = cosine * self.cos_m - sine * self.sin_m  # cos(theta + m)
+        if self.easy_margin:
+            phi = paddle.where(cosine > 0, phi, cosine)
+        else:
+            phi = paddle.where(cosine > self.th, phi, cosine - self.mm)
+        target_one_hot = F.one_hot(targets, self.n_classes)
+        outputs = (target_one_hot * phi) + (
+            (1.0 - target_one_hot) * cosine) - target_one_hot * self.margin2
         outputs = self.scale * outputs
         pred = F.log_softmax(outputs, axis=-1)
 
