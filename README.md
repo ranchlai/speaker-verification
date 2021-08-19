@@ -67,8 +67,8 @@ The test list is veri_test2.txt, which can be download from here [VoxCeleb1 (cle
 ### This repo
 | model |config|checkpoint |eval frames| eer |
 | --------------- | --------------- | --------------- |--------------- |--------------- |
-| ResnetSE34 + SAP + CMSoftmax| [tbd] | |all|0.93%|
-| ECAPA-TDNN + AAMSoftmax | [tbd] | |all|1.10%|
+| ResnetSE34 + SAP + CMSoftmax| [tba] | [tba]|all|0.93%|
+| ECAPA-TDNN + AAMSoftmax | [tba] | [tba] |all|1.10%|
 
 ## Reference
 
