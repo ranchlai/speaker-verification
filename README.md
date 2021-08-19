@@ -17,6 +17,26 @@ Finally, create a txt file that contains the list of audios for training by
 cd ./data/voxceleb/
 find `pwd`/ --type f > vox_files.txt
 ```
+### Datasets for augmentation
+The following datasets are required for dataset augmentation
+- [Room Impulse Response and Noise Database](https://openslr.org/28/)
+- [MUSAN](https://openslr.org/17/)
+
+For the RIR dataset, you must list all audio files under the folder `RIRS_NOISES/simulated_rirs/` into a text file, e.g., data/rir.list and config it as rir_path in the `config.yaml` file.
+
+Likewise, you have to config the the following fields in the config file for noise augmentation
+``` yaml
+muse_speech: <musan_split/speech.list>
+muse_speech_srn_high: 15.0
+muse_speech_srn_low: 12.0
+muse_music: <musan_split/music.list>
+muse_music_srn_high: 15.0
+muse_music_srn_low: 5.0
+muse_noise: <musan_split/noise.list>
+muse_noise_srn_high: 15
+muse_noise_srn_low: 5.0
+```
+
 ## Testing datasets
 The testing split of VoxCeleb 1 is used for measuring the performance of speaker verification duration training and after the training completes.  You will need to download the data and unzip into a folder, e.g, `./data/voxceleb/test/`.
 
