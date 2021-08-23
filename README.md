@@ -1,4 +1,5 @@
 # Speaker verification using and ResnetSE ECAPA-TDNN
+
 ## Introduction
 In this example, we demonstrate how to use PaddleAudio to train two types of networks for speaker verification.
 The networks we support here are
@@ -26,13 +27,13 @@ For the RIR dataset, you must list all audio files under the folder `RIRS_NOISES
 
 Likewise, you have to config the the following fields in the config file for noise augmentation
 ``` yaml
-muse_speech: <musan_split/speech.list>
+muse_speech: <musan_split/speech.list> #replace with your actual path
 muse_speech_srn_high: 15.0
 muse_speech_srn_low: 12.0
-muse_music: <musan_split/music.list>
+muse_music: <musan_split/music.list> #replace with your actual path
 muse_music_srn_high: 15.0
 muse_music_srn_low: 5.0
-muse_noise: <musan_split/noise.list>
+muse_noise: <musan_split/noise.list> #replace with your actual path
 muse_noise_srn_high: 15
 muse_noise_srn_low: 5.0
 ```
@@ -45,30 +46,49 @@ Then download the text files which list utterance  pairs to compare and the true
 ## Training
 To train your model from scratch, first create a folder(workspace) by
 
+``` bash
+cd egs
+mkdir <your_example>
+cd <your_example>
+cp ../resnet/config.yaml . #Copy an example config to your workspace
 ```
-mkdir run1
-cd run1
-
-```
-Copy an example config to your workspace by
-```
-cp ../eg/config.yaml .
-```
-Then change the config file accordingly to make sure all audio files can be correctly located(including the files used for data augmentation). Also you can change the training and model hyper-parameters  to suit your need.
+Then change the config file accordingly to make sure all audio files can be correctly located(including the files used for data augmentation). Also you can change the training and model hyper-parameters to suit your need.
 
 Finally start your training by
-```sh
-python ../train.py -c ../run1/config.yaml  -d gpu:0
+
+``` bash
+python ../../train.py -c config.yaml  -d gpu:0
 ```
-
-
-
 ## Testing
-To compute the eer after training completes, run
+First download the checkpoints for resnet or ecapa-tdnn,
+
+| checkpoint |size| eer |
+| --------------- | --------------- | --------------- |
+| [ResnetSE34 + SAP + CMSoftmax](https://bj.bcebos.com/paddleaudio/models/speaker/resnetse34_epoch92_eer0.00931.pdparams) |26MB | 0.93%|
+| [ecapa-tdnn + AAMSoftmax ](https://bj.bcebos.com/paddleaudio/models/speaker/tdnn_amsoftmax_epoch51_eer0.011.pdparams)| 80MB |1.10%|
+
+Then prepare the test dataset as described in Testing datasets, and set the following path in the config file,
+``` yaml
+mean_std_file: ../../data/stat.pd
+test_list: ../../data/veri_test2.txt
+test_folder: ../../data/voxceleb1/
 ```
-cd run1
-python ../test.py -w <checkpoint_path> -c config.yaml  -d gpu:0
+
+To compute the eer using resnet, run:
+
+``` bash
+cd egs/resnet/
+python ../../test.py -w <checkpoint path> -c config.yaml  -d gpu:0
 ```
+which will result in eer 0.00931.
+
+for ecapa-tdnn, run:
+``` bash
+cd egs/ecapa-tdnn/
+python ../../test.py -w <checkpoint path> -c config.yaml  -d gpu:0
+```
+which gives you eer 0.0105.
+
 
 
 ## Results
@@ -87,10 +107,11 @@ The test list is veri_test2.txt, which can be download from here [VoxCeleb1 (cle
 ### This repo
 | model |config|checkpoint |eval frames| eer |
 | --------------- | --------------- | --------------- |--------------- |--------------- |
-| ResnetSE34 + SAP + CMSoftmax| [tba] | [tba]|all|0.93%|
-| ECAPA-TDNN + AAMSoftmax | [tba] | [tba] |all|1.10%|
+| ResnetSE34 + SAP + CMSoftmax| [config.yaml](./egs/resent/config.yaml) |[checkpoint](https://bj.bcebos.com/paddleaudio/models/speaker/resnetse34_epoch92_eer0.00931.pdparams) | all|0.93%|
+| ECAPA-TDNN + AAMSoftmax | [config.yaml](./egs/ecapa-tdnn/config.yaml) | [checkpoint](https://bj.bcebos.com/paddleaudio/models/speaker/tdnn_amsoftmax_epoch51_eer0.011.pdparams) | all|1.10%|
 
 ## Reference
 
-- [1] Hu J, Shen L, Sun G. Squeeze-and-excitation networks[C]//Proceedings of the IEEE conference on computer vision and pattern recognition. 2018: 7132-7141
-- [2] Desplanques B, Thienpondt J, Demuynck K. Ecapa-tdnn: Emphasized channel attention, propagation and aggregation in tdnn based speaker verification[J]. arXiv preprint arXiv:2005.07143, 2020.
+[1] Hu J, Shen L, Sun G. Squeeze-and-excitation networks[C]//Proceedings of the IEEE conference on computer vision and pattern recognition. 2018: 7132-7141
+
+[2] Desplanques B, Thienpondt J, Demuynck K. Ecapa-tdnn: Emphasized channel attention, propagation and aggregation in tdnn based speaker verification[J]. arXiv preprint arXiv:2005.07143, 2020.
