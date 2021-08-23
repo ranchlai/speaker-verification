@@ -23,6 +23,7 @@ fbank:
   amin: !!float 1e-5
   top_db: 75
   dtype: float32
+
 augment_with_sox: False
 augment_mel: False
 augment_wav: True
@@ -36,10 +37,8 @@ muse_music_srn_low: 5.0
 muse_noise: ../../data/musan_split/noise.list
 muse_noise_srn_high: 15
 muse_noise_srn_low: 5.0
-
 freeze_param: False
 freezed_layers: -8
-
 batch_size:  64
 val_batch_size: 16
 num_workers:  32
@@ -48,21 +47,23 @@ duration: 5
 balanced_sampling: False
 epoch_num: 500
 max_lr: !!float 1e-06
-base_lr: !!float 1e-06
+base_lr: !!float 1e-04
 reverse_lr: False
 half_cycle: 10 #epoch
 
 # set the data path accordingly
-spk_scp: ../../data/final_vox12.txt
+spk_scp: ../../data/voxceleb1and2_list.txt
+speaker_set: ../../data/speaker_set.txt
+train_keys: ~
+# for testing
 mean_std_file: ../../data/stat.pd
-
-speaker_set: ~ #../../data/speaker_set.txt
-train_keys: ~ #../../data/all_keys.txt # _tiny.txt
-val_keys: ../../data/val_keys.txt
 test_list: ../../data/veri_test2.txt
 test_folder: ../../data/voxceleb1/
+
 model_dir :  ./checkpoints/
-log_dir :  ./log
+model_prefix: 'resnet'
+log_dir :  ./log/
+log_file :  ./log.txt
 log_step: 10
 checkpoint_step :  5000
 eval_step: 600
@@ -72,7 +73,7 @@ max_freq_mask: 1
 max_time_mask_width: 20
 max_freq_mask_width: 10
 model:
-  name: ResNetSE34V2 #ResNetSE34V2,ResNetSE34
+  name: ResNetSE34V2 # or ResNetSE34
   params:
     feature_dim: 256
     scale_factor: 1
