@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__all__ = ['ProtoTypical', 'AMSoftmaxLoss', 'CMSoftmax']
 import math
 
 import numpy as np
 import paddle
 import paddle.nn as nn
 import paddle.nn.functional as F
+
+__all__ = ['ProtoTypical', 'AMSoftmaxLoss', 'CMSoftmax']
 
 
 class AMSoftmaxLoss(nn.Layer):
