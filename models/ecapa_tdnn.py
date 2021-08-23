@@ -250,7 +250,6 @@ class AttentiveStatisticsPooling(nn.Layer):
             mean = mean.unsqueeze(2).tile((1, 1, L))
             std = std.unsqueeze(2).tile((1, 1, L))
             attn = paddle.concat([x, mean, std], axis=1)
-            #import pdb;pdb.set_trace()
         else:
             attn = x
 
@@ -324,7 +323,7 @@ class SERes2NetBlock(nn.Layer):
         return x + residual
 
 
-class ECAPA_TDNN(nn.Layer):
+class EcapaTDNN(nn.Layer):
     def __init__(self,
                  input_size,
                  lin_neurons=192,
@@ -337,7 +336,7 @@ class ECAPA_TDNN(nn.Layer):
                  se_channels=128,
                  global_context=True):
 
-        super(ECAPA_TDNN, self).__init__()
+        super(EcapaTDNN, self).__init__()
 
         assert len(channels) == len(kernel_sizes)
         assert len(channels) == len(dilations)

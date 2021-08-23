@@ -97,12 +97,7 @@ class ResNetSE(nn.Layer):
         nn.initializer.XavierNormal(out)
         return out
 
-    def forward(self, x, augment_wav=None, augment_mel=None, augment_prob=0.5):
-        if augment_wav and np.random.rand(1, ) < augment_prob:
-            x = augment_wav(x)
-        x = self.melspectrogram(x)
-        if augment_mel and np.random.rand(1, ) < augment_prob:
-            x = augment_mel(x)
+    def forward(self, x):
 
         x = x.unsqueeze(1)
         x = self.conv1(x)
@@ -115,7 +110,6 @@ class ResNetSE(nn.Layer):
 
         x = x.reshape((x.shape[0], -1, x.shape[-1]))
         w = self.attention(x)
-
         if self.encoder_type == "SAP":
             x = paddle.sum(x * w, axis=2)
         elif self.encoder_type == "ASP":

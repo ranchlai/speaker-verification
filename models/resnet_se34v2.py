@@ -95,6 +95,7 @@ class ResNetSE(nn.Layer):
         return out
 
     def forward(self, x):
+
         x = x.unsqueeze(1)
         x = self.conv1(x)
         x = self.relu(x)
@@ -106,9 +107,7 @@ class ResNetSE(nn.Layer):
         x = self.layer4(x)
 
         x = x.reshape((x.shape[0], -1, x.shape[-1]))
-
         w = self.attention(x)
-
         if self.encoder_type == "SAP":
             x = paddle.sum(x * w, axis=2)
         elif self.encoder_type == "ASP":
