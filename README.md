@@ -48,7 +48,7 @@ muse_noise_srn_high: 15
 muse_noise_srn_low: 5.0
 ```
 
-## Testing datasets
+## <a name="test_dataset"></a>Testing datasets
 The testing split of VoxCeleb 1 is used for measuring the performance of speaker verification duration training and after the training completes.  You will need to download the data and unzip into a folder, e.g, `./data/voxceleb/test/`.
 
 Then download the text files which list utterance  pairs to compare and the true labels indicating whether the utterances come from the same speaker. There are multiple trials and we will use [veri_test2](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/meta/veri_test2.txt).
@@ -77,7 +77,7 @@ First download the checkpoints for resnet or ecapa-tdnn,
 | [ResnetSE34 + SAP + CMSoftmax](https://bj.bcebos.com/paddleaudio/models/speaker/resnetse34_epoch92_eer0.00931.pdparams) |26MB | 0.93%|
 | [ecapa-tdnn + AAMSoftmax ](https://bj.bcebos.com/paddleaudio/models/speaker/tdnn_amsoftmax_epoch51_eer0.011.pdparams)| 80MB |1.10%|
 
-Then prepare the test dataset as described in Testing datasets, and set the following path in the config file,
+Then prepare the test dataset as described in [Testing datasets](#test_dataset), and set the following path in the config file,
 ``` yaml
 mean_std_file: ../../data/stat.pd
 test_list: ../../data/veri_test2.txt
