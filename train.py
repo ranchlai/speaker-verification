@@ -31,7 +31,6 @@ from paddleaudio.transforms import *
 from paddleaudio.utils import get_logger
 
 from dataset import get_train_loader
-from evaluate import evaluate
 from losses import AdditiveAngularMargin, AMSoftmaxLoss, CMSoftmax
 from models import *
 from utils import (MixUpLoss, NoiseSource, RIRSource, load_checkpoint,
@@ -50,29 +49,17 @@ def get_lr(step, base_lr, max_lr, half_cycle=5000, reverse=False):
     return lr
 
 
-class Normalize2:
+class Normalize:
     def __init__(self, mean_file, eps=1e-5):
         self.eps = eps
         mean = paddle.load(mean_file)['mean']
         std = paddle.load(mean_file)['std']
 
         self.mean = mean.unsqueeze((0, 2))
-        #self.std = std.unsqueeze((0,2))+eps
 
     def __call__(self, x):
         assert x.ndim == 3
         return x - self.mean
-
-
-class Normalize:
-    def __init__(self, eps=1e-5):
-        self.eps = eps
-
-    def __call__(self, x):
-        assert x.ndim == 3
-        mean = paddle.mean(x, [1, 2], keepdim=True)
-        std = paddle.std(x, [1, 2], keepdim=True)
-        return (x - mean) / (std + self.eps)
 
 
 def freeze_bn(layer):
@@ -86,15 +73,27 @@ def freeze_bn(layer):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--config', type=str, required=True)
     parser.add_argument(
         '-d',
         '--device',
-        #choices=['cpu', 'gpu'],
         default="gpu",
-        help="Select which device to train model, defaults to gpu.")
-    parser.add_argument('-r', '--restore', type=int, required=False, default=-1)
-    parser.add_argument('-w', '--weight', type=str, required=False, default='')
-    parser.add_argument('-c', '--config', type=str, required=True)
+        help='Select which device to train model, defaults to gpu.')
+    parser.add_argument(
+        '-r',
+        '--restore',
+        type=int,
+        required=False,
+        default=-1,
+        help=
+        'the epoch number to restore from(the checkpoint contains weights for model/loss/optimizer)'
+    )
+    parser.add_argument('-w',
+                        '--weight',
+                        type=str,
+                        required=False,
+                        default='',
+                        help='the model wieght to restore form')
     parser.add_argument('-e',
                         '--eval_at_begin',
                         type=bool,
@@ -107,7 +106,6 @@ if __name__ == '__main__':
                         required=False,
                         default=False)
     args = parser.parse_args()
-
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
@@ -131,14 +129,12 @@ if __name__ == '__main__':
     model = ModelClass(**config['model']['params'])
     #define loss and lr
     LossClass = eval(config['loss']['name'])
-
     loss_fn = LossClass(**config['loss']['params'])
     loss_fn.train()
     params = model.parameters() + loss_fn.parameters()
 
     transforms = []
     if config['augment_wav']:
-
         noise_source1 = NoiseSource(open(
             config['muse_speech']).read().split('\n')[:-1],
                                     sample_rate=16000,
@@ -176,7 +172,7 @@ if __name__ == '__main__':
     melspectrogram = LogMelSpectrogram(**config['fbank'])
     transforms += [melspectrogram]
     if config['normalize']:
-        transforms += [Normalize2(config['mean_std_file'])]
+        transforms += [Normalize(config['mean_std_file'])]
 
     if config['augment_mel']:
         #define spectrogram masking
@@ -192,7 +188,6 @@ if __name__ == '__main__':
         mel_augments = RandomApply([freq_masking, time_masking], p=0.25)
         transforms += [mel_augments]
     transforms = Compose(transforms)
-    print(transforms)
 
     if args.restore != -1:
         logger.info(f'restoring from checkpoint {args.restore}')
@@ -217,7 +212,7 @@ if __name__ == '__main__':
         optimizer = Adam(learning_rate=config['max_lr'], parameters=params)
 
     if args.weight != '':
-        logger.info(f'loading weight {args.weight}')
+        logger.info(f'loading weight from {args.weight}')
         sd = paddle.load(args.weight)
         model.load_dict(sd)
 
@@ -227,7 +222,6 @@ if __name__ == '__main__':
         model = paddle.DataParallel(model)
     train_loader = get_train_loader(config)
     epoch_num = config['epoch_num']
-    print(args.eval_at_begin)
     if args.restore != -1 and local_rank == 0 and args.eval_at_begin:
         result, min_dcf = compute_eer(config, model)
         best_eer = result.eer  #0.022#result.eer
@@ -244,10 +238,7 @@ if __name__ == '__main__':
                 p.stop_gradient = True
 
     for epoch in range(start_epoch, epoch_num):
-        # seed = int(time.time()%1000*(local_rank+1)+time.time()%100)+epoch
-        # np.random.seed(seed)
-        # random.seed(seed)
-        # paddle.seed(seed)
+
         avg_loss = 0.0
         avg_acc = 0.0
         model.train()
