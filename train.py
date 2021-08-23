@@ -114,9 +114,9 @@ if __name__ == '__main__':
     os.makedirs(config['log_dir'], exist_ok=True)
     logger = get_logger(__file__,
                         log_dir=config['log_dir'],
-                        log_file_name='resnet_se34v2')
+                        log_file_name=config['log_file'])
 
-    prefix = f'tdnn_amsoftmax'
+    prefix = config['model_prefix']
 
     if args.distributed:
         dist.init_parallel_env()

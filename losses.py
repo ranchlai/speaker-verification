@@ -136,8 +136,6 @@ class AdditiveAngularMargin(AngularMargin):
         self.nll_loss = nn.NLLLoss()
         self.n_classes = n_classes
 
-    #  self.drop = nn.Dropout(0.1)
-
     def forward(self, logits, targets):
         # logits = self.drop(logits)
         logits = F.normalize(logits, p=2, axis=1, epsilon=1e-8)
@@ -178,8 +176,6 @@ class CMSoftmax(AngularMargin):
         self.n_classes = n_classes
         self.margin2 = margin2
 
-    #  self.drop = nn.Dropout(0.1)
-
     def forward(self, logits, targets):
         # logits = self.drop(logits)
         logits = F.normalize(logits, p=2, axis=1, epsilon=1e-8)
@@ -200,8 +196,3 @@ class CMSoftmax(AngularMargin):
         pred = F.log_softmax(outputs, axis=-1)
 
         return self.nll_loss(pred, targets), pred
-
-
-if __name__ == '__main__':
-    loss = AMSoftmaxLoss(512, 10)
-    print(loss.parameters())

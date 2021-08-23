@@ -47,9 +47,9 @@ def compute_eer(
         0, 1
     ], 'the input labels must contain 0 and 1 for distinct and identical id. '
     eps = 1e-8
-    assert np.min(scores) >= -1.0 - eps and np.max(
-        scores
-    ) < 1.0 + eps, 'the score must be in the range between -1.0 and 1.0'
+    #assert np.min(scores) >= -1.0 - eps and np.max(
+    #    scores
+    #  ) < 1.0 + eps, 'the score must be in the range between -1.0 and 1.0'
     same_id_scores = scores[labels == 1]
     diff_id_scores = scores[labels == 0]
     thresh = np.linspace(np.min(diff_id_scores), np.max(same_id_scores), 1000)
