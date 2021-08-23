@@ -128,8 +128,7 @@ class Dataset(paddle.io.Dataset):
         else:
             self.speaker_set = list(set(self.speakers))
             self.speaker_set.sort()
-            with open('../data/speaker_set_vox12.txt', 'wt') as f:
-                f.write('\n'.join(self.speaker_set))
+
         self.spk2cls = {s: i for i, s in enumerate(self.speaker_set)}
         self.n_class = len(self.speaker_set)
         logger.info(f'speaker size: {self.n_class}')
