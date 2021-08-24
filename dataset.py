@@ -21,11 +21,9 @@ import subprocess
 import time
 import warnings
 
-import h5py
 import numpy as np
 import paddle
 import paddleaudio
-import sox
 import yaml
 #from paddle.io import DataLoader, Dataset, IterableDataset
 from paddle.utils import download
