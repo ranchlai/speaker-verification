@@ -22,7 +22,6 @@ fbank:
   window: hann
   amin: !!float 1e-5
   top_db: 75
-  dtype: float32
 
 augment_with_sox: False
 augment_mel: False
