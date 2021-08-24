@@ -17,6 +17,8 @@ pip install -e .
 Then clone this project, 
 ```
 git clone https://github.com/ranchlai/speaker-verification.git
+cd speaker-verification
+pip install -r requirements.txt
 ```
 
 
