@@ -18,9 +18,9 @@ from typing import List, Tuple, Union
 import numpy as np
 
 
-def compute_eer(
-    scores: Union[np.ndarray, List[float]], labels: Union[np.ndarray, List[int]]
-) -> Tuple[float, float, np.ndarray, np.ndarray]:
+def compute_eer(scores: Union[np.ndarray, List[float]],
+                labels: Union[np.ndarray, List[int]]) -> Tuple[
+                    float, float, np.ndarray, np.ndarray]:
     """Compute equal error rate(EER) given matching scores and corresponding labels
 
     Parameters:

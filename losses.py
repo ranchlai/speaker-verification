@@ -34,12 +34,13 @@ class AMSoftmaxLoss(nn.Layer):
         IEEE Signal Processing Letters, vol. 25, no. 7, 2018, pp. 926–930.
 
     """
+
     def __init__(self,
                  feature_dim: int,
                  n_classes: int,
-                 eps: float = 1e-5,
-                 margin: float = 0.3,
-                 scale: float = 30.0):
+                 eps: float=1e-5,
+                 margin: float=0.3,
+                 scale: float=30.0):
         super(AMSoftmaxLoss, self).__init__()
         self.w = paddle.create_parameter((feature_dim, n_classes), 'float32')
         self.eps = eps
@@ -67,6 +68,7 @@ class ProtoTypical(nn.Layer):
          Interspeech 2020, 2020, pp. 2977–2981.
 
     """
+
     def __init__(self, s=20.0, eps=1e-8):
         super(ProtoTypical, self).__init__()
         self.nll_loss = nn.NLLLoss()
@@ -74,16 +76,16 @@ class ProtoTypical(nn.Layer):
         self.s = s
 
     def forward(self, logits):
-        assert logits.ndim == 3, (
-            f'the input logits must be a ' +
-            f'3d tensor of shape [n_spk,n_uttns,emb_dim],' +
-            f'but received logits.ndim = {logits.ndim}')
+        assert logits.ndim == 3, (f'the input logits must be a ' +
+                                  f'3d tensor of shape [n_spk,n_uttns,emb_dim],'
+                                  + f'but received logits.ndim = {logits.ndim}')
         import pdb
         pdb.set_trace()
 
         logits = F.normalize(logits, p=2, axis=-1, epsilon=self.eps)
-        proto = paddle.mean(logits[:, 1:, :], axis=1, keepdim=False).transpose(
-            (1, 0))  # [emb_dim, n_spk]
+        proto = paddle.mean(
+            logits[:, 1:, :], axis=1, keepdim=False).transpose(
+                (1, 0))  # [emb_dim, n_spk]
         query = logits[:, 0, :]  # [n_spk, emb_dim]
         similarity = paddle.matmul(query, proto) * self.s  #[n_spk,n_spk]
         label = paddle.arange(0, similarity.shape[0])
@@ -141,7 +143,7 @@ class AdditiveAngularMargin(AngularMargin):
         # logits = self.drop(logits)
         logits = F.normalize(logits, p=2, axis=1, epsilon=1e-8)
         wn = F.normalize(self.w, p=2, axis=0, epsilon=1e-8)
-        cosine = logits @ wn
+        cosine = logits @wn
 
         #cosine = outputs.astype('float32')
         sine = paddle.sqrt(1.0 - paddle.square(cosine))
@@ -181,7 +183,7 @@ class CMSoftmax(AngularMargin):
         # logits = self.drop(logits)
         logits = F.normalize(logits, p=2, axis=1, epsilon=1e-8)
         wn = F.normalize(self.w, p=2, axis=0, epsilon=1e-8)
-        cosine = logits @ wn
+        cosine = logits @wn
 
         #cosine = outputs.astype('float32')
         sine = paddle.sqrt(1.0 - paddle.square(cosine))

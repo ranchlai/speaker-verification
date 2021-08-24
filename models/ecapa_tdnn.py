@@ -27,8 +27,9 @@ def length_to_mask(length, max_len=None, dtype=None):
     if max_len is None:
         max_len = length.max().astype(
             'int').item()  # using arange to generate mask
-    mask = paddle.arange(max_len, dtype=length.dtype).expand(
-        (len(length), max_len)) < length.unsqueeze(1)
+    mask = paddle.arange(
+        max_len, dtype=length.dtype).expand(
+            (len(length), max_len)) < length.unsqueeze(1)
 
     if dtype is None:
         dtype = length.dtype
@@ -39,17 +40,16 @@ def length_to_mask(length, max_len=None, dtype=None):
 
 class Conv1d(nn.Layer):
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride=1,
-        padding="same",
-        dilation=1,
-        groups=1,
-        bias=True,
-        padding_mode="reflect",
-    ):
+            self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=1,
+            padding="same",
+            dilation=1,
+            groups=1,
+            bias=True,
+            padding_mode="reflect", ):
         super(Conv1d, self).__init__()
 
         self.kernel_size = kernel_size
@@ -66,8 +66,7 @@ class Conv1d(nn.Layer):
             padding=0,
             dilation=self.dilation,
             groups=groups,
-            bias_attr=bias,
-        )
+            bias_attr=bias, )
 
     def forward(self, x):
         if self.padding == "same":
@@ -86,7 +85,10 @@ class Conv1d(nn.Layer):
                   data_format="NCL")  # Applying padding
         return x
 
-    def _get_padding_elem(self, L_in: int, stride: int, kernel_size: int,
+    def _get_padding_elem(self,
+                          L_in: int,
+                          stride: int,
+                          kernel_size: int,
                           dilation: int):
         if stride > 1:
             n_steps = math.ceil(((L_in - kernel_size * dilation) / stride) + 1)
@@ -102,15 +104,14 @@ class Conv1d(nn.Layer):
 
 class BatchNorm1d(nn.Layer):
     def __init__(
-        self,
-        input_size,
-        eps=1e-05,
-        momentum=0.9,
-        weight_attr=None,
-        bias_attr=None,
-        data_format='NCL',
-        use_global_stats=None,
-    ):
+            self,
+            input_size,
+            eps=1e-05,
+            momentum=0.9,
+            weight_attr=None,
+            bias_attr=None,
+            data_format='NCL',
+            use_global_stats=None, ):
         super(BatchNorm1d, self).__init__()
 
         self.norm = nn.BatchNorm1D(
@@ -120,8 +121,7 @@ class BatchNorm1d(nn.Layer):
             weight_attr=weight_attr,
             bias_attr=bias_attr,
             data_format=data_format,
-            use_global_stats=use_global_stats,
-        )
+            use_global_stats=use_global_stats, )
 
     def forward(self, x):
         x_n = self.norm(x)
@@ -130,20 +130,18 @@ class BatchNorm1d(nn.Layer):
 
 class TDNNBlock(nn.Layer):
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        dilation,
-        activation=nn.ReLU,
-    ):
+            self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            dilation,
+            activation=nn.ReLU, ):
         super(TDNNBlock, self).__init__()
         self.conv = Conv1d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            dilation=dilation,
-        )
+            dilation=dilation, )
         self.activation = activation()
         self.norm = BatchNorm1d(input_size=out_channels)
 
@@ -161,10 +159,9 @@ class Res2NetBlock(nn.Layer):
         hidden_channel = out_channels // scale
 
         self.blocks = nn.LayerList([
-            TDNNBlock(in_channel,
-                      hidden_channel,
-                      kernel_size=3,
-                      dilation=dilation) for i in range(scale - 1)
+            TDNNBlock(
+                in_channel, hidden_channel, kernel_size=3, dilation=dilation)
+            for i in range(scale - 1)
         ])
         self.scale = scale
 
@@ -186,13 +183,11 @@ class SEBlock(nn.Layer):
     def __init__(self, in_channels, se_channels, out_channels):
         super(SEBlock, self).__init__()
 
-        self.conv1 = Conv1d(in_channels=in_channels,
-                            out_channels=se_channels,
-                            kernel_size=1)
+        self.conv1 = Conv1d(
+            in_channels=in_channels, out_channels=se_channels, kernel_size=1)
         self.relu = paddle.nn.ReLU()
-        self.conv2 = Conv1d(in_channels=se_channels,
-                            out_channels=out_channels,
-                            kernel_size=1)
+        self.conv2 = Conv1d(
+            in_channels=se_channels, out_channels=out_channels, kernel_size=1)
         self.sigmoid = paddle.nn.Sigmoid()
 
     def forward(self, x, lengths=None):
@@ -222,17 +217,18 @@ class AttentiveStatisticsPooling(nn.Layer):
         else:
             self.tdnn = TDNNBlock(channels, attention_channels, 1, 1)
         self.tanh = nn.Tanh()
-        self.conv = Conv1d(in_channels=attention_channels,
-                           out_channels=channels,
-                           kernel_size=1)
+        self.conv = Conv1d(
+            in_channels=attention_channels,
+            out_channels=channels,
+            kernel_size=1)
 
     def forward(self, x, lengths=None):
         C, L = x.shape[1], x.shape[2]  # KP: (N, C, L)
 
         def _compute_statistics(x, m, axis=2, eps=self.eps):
             mean = (m * x).sum(axis)
-            std = paddle.sqrt(
-                (m * (x - mean.unsqueeze(axis)).pow(2)).sum(axis).clip(eps))
+            std = paddle.sqrt((m * (x - mean.unsqueeze(axis)).pow(2)).sum(axis)
+                              .clip(eps))
             return mean, std
 
         if lengths is None:
@@ -273,15 +269,14 @@ class AttentiveStatisticsPooling(nn.Layer):
 
 class SERes2NetBlock(nn.Layer):
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        res2net_scale=8,
-        se_channels=128,
-        kernel_size=1,
-        dilation=1,
-        activation=nn.ReLU,
-    ):
+            self,
+            in_channels,
+            out_channels,
+            res2net_scale=8,
+            se_channels=128,
+            kernel_size=1,
+            dilation=1,
+            activation=nn.ReLU, ):
         super(SERes2NetBlock, self).__init__()
         self.out_channels = out_channels
         self.tdnn1 = TDNNBlock(
@@ -289,8 +284,7 @@ class SERes2NetBlock(nn.Layer):
             out_channels,
             kernel_size=1,
             dilation=1,
-            activation=activation,
-        )
+            activation=activation, )
         self.res2net_block = Res2NetBlock(out_channels, out_channels,
                                           res2net_scale, dilation)
         self.tdnn2 = TDNNBlock(
@@ -298,8 +292,7 @@ class SERes2NetBlock(nn.Layer):
             out_channels,
             kernel_size=1,
             dilation=1,
-            activation=activation,
-        )
+            activation=activation, )
         self.se_block = SEBlock(out_channels, se_channels, out_channels)
 
         self.shortcut = None
@@ -307,8 +300,7 @@ class SERes2NetBlock(nn.Layer):
             self.shortcut = Conv1d(
                 in_channels=in_channels,
                 out_channels=out_channels,
-                kernel_size=1,
-            )
+                kernel_size=1, )
 
     def forward(self, x, lengths=None):
         residual = x
@@ -351,8 +343,7 @@ class EcapaTDNN(nn.Layer):
                 channels[0],
                 kernel_sizes[0],
                 dilations[0],
-                activation,
-            ))
+                activation, ))
 
         # SE-Res2Net layers
         for i in range(1, len(channels) - 1):
@@ -364,8 +355,7 @@ class EcapaTDNN(nn.Layer):
                     se_channels=se_channels,
                     kernel_size=kernel_sizes[i],
                     dilation=dilations[i],
-                    activation=activation,
-                ))
+                    activation=activation, ))
 
         # Multi-layer feature aggregation
         self.mfa = TDNNBlock(
@@ -373,23 +363,20 @@ class EcapaTDNN(nn.Layer):
             channels[-1],
             kernel_sizes[-1],
             dilations[-1],
-            activation,
-        )
+            activation, )
 
         # Attentive Statistical Pooling
         self.asp = AttentiveStatisticsPooling(
             channels[-1],
             attention_channels=attention_channels,
-            global_context=global_context,
-        )
+            global_context=global_context, )
         self.asp_bn = BatchNorm1d(input_size=channels[-1] * 2)
 
         # Final linear transformation
         self.fc = Conv1d(
             in_channels=channels[-1] * 2,
             out_channels=self.emb_size,
-            kernel_size=1,
-        )
+            kernel_size=1, )
         self.drop = nn.Dropout(0.25)
 
     def forward(self, x, lengths=None):

@@ -85,34 +85,35 @@ if __name__ == '__main__':
         type=int,
         required=False,
         default=-1,
-        help=
-        'the epoch number to restore from(the checkpoint contains weights for model/loss/optimizer)'
+        help='the epoch number to restore from(the checkpoint contains weights for model/loss/optimizer)'
     )
-    parser.add_argument('-w',
-                        '--weight',
-                        type=str,
-                        required=False,
-                        default='',
-                        help='the model wieght to restore form')
-    parser.add_argument('-e',
-                        '--eval_at_begin',
-                        type=bool,
-                        choices=[True, False],
-                        required=False,
-                        default=False)
-    parser.add_argument('--distributed',
-                        type=bool,
-                        choices=[True, False],
-                        required=False,
-                        default=False)
+    parser.add_argument(
+        '-w',
+        '--weight',
+        type=str,
+        required=False,
+        default='',
+        help='the model wieght to restore form')
+    parser.add_argument(
+        '-e',
+        '--eval_at_begin',
+        type=bool,
+        choices=[True, False],
+        required=False,
+        default=False)
+    parser.add_argument(
+        '--distributed',
+        type=bool,
+        choices=[True, False],
+        required=False,
+        default=False)
     args = parser.parse_args()
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
     os.makedirs(config['log_dir'], exist_ok=True)
-    logger = get_logger(__file__,
-                        log_dir=config['log_dir'],
-                        log_file_name=config['log_file'])
+    logger = get_logger(
+        __file__, log_dir=config['log_dir'], log_file_name=config['log_file'])
 
     prefix = config['model_prefix']
 
@@ -135,34 +136,37 @@ if __name__ == '__main__':
 
     transforms = []
     if config['augment_wav']:
-        noise_source1 = NoiseSource(open(
-            config['muse_speech']).read().split('\n')[:-1],
-                                    sample_rate=16000,
-                                    duration=config['duration'],
-                                    batch_size=config['batch_size'])
-        noisify1 = Noisify(noise_source1,
-                           snr_high=config['muse_speech_srn_high'],
-                           snr_low=config['muse_speech_srn_low'],
-                           random=True)
+        noise_source1 = NoiseSource(
+            open(config['muse_speech']).read().split('\n')[:-1],
+            sample_rate=16000,
+            duration=config['duration'],
+            batch_size=config['batch_size'])
+        noisify1 = Noisify(
+            noise_source1,
+            snr_high=config['muse_speech_srn_high'],
+            snr_low=config['muse_speech_srn_low'],
+            random=True)
 
-        noise_source2 = NoiseSource(open(
-            config['muse_music']).read().split('\n')[:-1],
-                                    sample_rate=16000,
-                                    duration=config['duration'],
-                                    batch_size=config['batch_size'])
-        noisify2 = Noisify(noise_source2,
-                           snr_high=config['muse_music_srn_high'],
-                           snr_low=config['muse_music_srn_low'],
-                           random=True)
-        noise_source3 = NoiseSource(open(
-            config['muse_noise']).read().split('\n')[:-1],
-                                    sample_rate=16000,
-                                    duration=config['duration'],
-                                    batch_size=config['batch_size'])
-        noisify3 = Noisify(noise_source3,
-                           snr_high=config['muse_noise_srn_high'],
-                           snr_low=config['muse_noise_srn_low'],
-                           random=True)
+        noise_source2 = NoiseSource(
+            open(config['muse_music']).read().split('\n')[:-1],
+            sample_rate=16000,
+            duration=config['duration'],
+            batch_size=config['batch_size'])
+        noisify2 = Noisify(
+            noise_source2,
+            snr_high=config['muse_music_srn_high'],
+            snr_low=config['muse_music_srn_low'],
+            random=True)
+        noise_source3 = NoiseSource(
+            open(config['muse_noise']).read().split('\n')[:-1],
+            sample_rate=16000,
+            duration=config['duration'],
+            batch_size=config['batch_size'])
+        noisify3 = Noisify(
+            noise_source3,
+            snr_high=config['muse_noise_srn_high'],
+            snr_low=config['muse_noise_srn_low'],
+            random=True)
         rir_files = open(config['rir_path']).read().split('\n')[:-1]
         random_rir_reader = RIRSource(rir_files, random=True, sample_rate=16000)
         reverb = Reverberate(rir_source=random_rir_reader)
@@ -259,7 +263,6 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
             model.clear_gradients()
-            optimizer.clear_gradients()
 
             acc = np.mean(np.argmax(pred.numpy(), axis=1) == y.numpy())
             if batch_id < 100:
@@ -296,7 +299,8 @@ if __name__ == '__main__':
                 }
                 paddle.save(obj, fn)
 
-            if step != 0 and step % config['eval_step'] == 0 and local_rank == 0:
+            if step != 0 and step % config[
+                    'eval_step'] == 0 and local_rank == 0:
 
                 result, min_dcf = compute_eer(config, model)
                 eer = result.eer
@@ -304,8 +308,8 @@ if __name__ == '__main__':
                 model.clear_gradients()
 
                 if eer < best_eer:
-                    logger.info('eer improved from {} to {}'.format(
-                        best_eer, eer))
+                    logger.info('eer improved from {} to {}'.format(best_eer,
+                                                                    eer))
                     best_eer = eer
                     fn = os.path.join(config['model_dir'],
                                       f'{prefix}_epoch{epoch}_eer{eer:.3}')

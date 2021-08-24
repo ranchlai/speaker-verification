@@ -84,22 +84,13 @@ def read_list(file):
     return keys, speakers, files
 
 
-def augment_by_sox(wav, sr):
-    tfm = sox.Transformer()
-    effects = ['reverb', 'fade']  #'echo']'compand',
-    num_effets = random.randint(1, len(effects))
-    for e in random.sample(effects, num_effets):
-        tfm.__getattribute__(e)()
-    wav = tfm.build_array(input_array=wav, sample_rate_in=sr)
-    return wav
-
-
 class Dataset(paddle.io.Dataset):
     """
     Dataset class for Audioset, with mel features stored in multiple hdf5 files.
     The h5 files store mel-spectrogram features pre-extracted from wav files.
     Use wav2mel.py to do feature extraction.
     """
+
     def __init__(self,
                  scp,
                  keys=None,
@@ -107,7 +98,6 @@ class Dataset(paddle.io.Dataset):
                  duration=None,
                  augment=True,
                  speaker_set=None,
-                 augment_with_sox=True,
                  augment_prob=0.5,
                  training=True,
                  balanced_sampling=False):
@@ -133,7 +123,6 @@ class Dataset(paddle.io.Dataset):
         logger.info(f'file size: {self.n_files}')
         self.augment = augment
         self.augment_prob = augment_prob
-        self.augment_with_sox = augment_with_sox
         self.training = training
         self.sample_rate = sample_rate
         self.balanced_sampling = balanced_sampling
@@ -165,9 +154,8 @@ class Dataset(paddle.io.Dataset):
             file_duration = self.duration
         while True:
             try:
-                wav, sr = paddleaudio.load(file,
-                                           sr=self.sample_rate,
-                                           duration=file_duration)
+                wav, sr = paddleaudio.load(
+                    file, sr=self.sample_rate, duration=file_duration)
                 break
             except:
                 key = self.keys[idx]
@@ -190,9 +178,6 @@ class Dataset(paddle.io.Dataset):
             wav = augments.random_crop_or_pad1d(wav, self.duration)
         elif self.duration:
             wav = augments.center_crop_or_pad1d(wav, self.duration)
-        if self.augment_with_sox and random.random(
-        ) < self.augment_prob:  #sox augment
-            wav = augment_by_sox(wav, sr)
 
         return wav, cls_idx
 
@@ -211,12 +196,12 @@ def worker_init(worker_id):
 
 def get_train_loader(config):
 
-    dataset = Dataset(config['spk_scp'],
-                      keys=config['train_keys'],
-                      speaker_set=config['speaker_set'],
-                      augment=True,
-                      augment_with_sox=config['augment_with_sox'],
-                      duration=config['duration'])
+    dataset = Dataset(
+        config['spk_scp'],
+        keys=config['train_keys'],
+        speaker_set=config['speaker_set'],
+        augment=True,
+        duration=config['duration'])
 
     # train_sampler = paddle.io.DistributedBatchSampler(
     # dataset, batch_size=config['batch_size'], shuffle=True, drop_last=True)
@@ -226,31 +211,33 @@ def get_train_loader(config):
     #                                     num_workers=config['num_workers'],
     #                                     worker_init_fn=worker_init)
 
-    train_loader = paddle.io.DataLoader(dataset,
-                                        shuffle=True,
-                                        batch_size=config['batch_size'],
-                                        drop_last=True,
-                                        num_workers=config['num_workers'],
-                                        use_buffer_reader=True,
-                                        use_shared_memory=True,
-                                        worker_init_fn=worker_init)
+    train_loader = paddle.io.DataLoader(
+        dataset,
+        shuffle=True,
+        batch_size=config['batch_size'],
+        drop_last=True,
+        num_workers=config['num_workers'],
+        use_buffer_reader=True,
+        use_shared_memory=True,
+        worker_init_fn=worker_init)
 
     return train_loader
 
 
 def get_val_loader(config):
 
-    dataset = Dataset(config['spk_scp'],
-                      keys=config['val_keys'],
-                      speaker_set=config['speaker_set'],
-                      augment=False,
-                      augment_with_sox=False,
-                      duration=config['duration'])
-    val_loader = paddle.io.DataLoader(dataset,
-                                      shuffle=False,
-                                      batch_size=config['val_batch_size'],
-                                      drop_last=False,
-                                      num_workers=config['num_workers'])
+    dataset = Dataset(
+        config['spk_scp'],
+        keys=config['val_keys'],
+        speaker_set=config['speaker_set'],
+        augment=False,
+        duration=config['duration'])
+    val_loader = paddle.io.DataLoader(
+        dataset,
+        shuffle=False,
+        batch_size=config['val_batch_size'],
+        drop_last=False,
+        num_workers=config['num_workers'])
 
     return val_loader
 

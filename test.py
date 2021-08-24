@@ -106,11 +106,8 @@ def compute_eer(config, model):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c',
-                        '--config',
-                        type=str,
-                        required=False,
-                        default='config.yaml')
+    parser.add_argument(
+        '-c', '--config', type=str, required=False, default='config.yaml')
     parser.add_argument(
         '-d',
         '--device',

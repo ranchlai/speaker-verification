@@ -14,7 +14,7 @@ git clone https://github.com/PaddlePaddle/models.git
 cd models/PaddleAudio
 pip install -e .
 ```
-Then clone this project, 
+Then clone this project,
 ```
 git clone https://github.com/ranchlai/speaker-verification.git
 cd speaker-verification

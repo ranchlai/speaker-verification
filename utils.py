@@ -71,8 +71,8 @@ def load_checkpoint(model_dir, epoch, prefix):
     print('loading checkpoing ' + file)
     model_dict = paddle.load(
         model_dir + '/{}_checkpoint_epoch{}.pdparams'.format(prefix, epoch))
-    optim_dict = paddle.load(
-        model_dir + '/{}_checkpoint_epoch{}.pdopt'.format(prefix, epoch))
+    optim_dict = paddle.load(model_dir + '/{}_checkpoint_epoch{}.pdopt'.format(
+        prefix, epoch))
     return model_dict, optim_dict
 
 
@@ -82,6 +82,7 @@ class MixUpLoss(paddle.nn.Layer):
     Reference:
     Zhang, Hongyi, et al. “Mixup: Beyond Empirical Risk Minimization.” International Conference on Learning Representations, 2017.
     """
+
     def __init__(self, criterion):
         super(MixUpLoss, self).__init__()
         self.criterion = criterion
@@ -150,17 +151,18 @@ class NoiseSource:
         print(audio.shape)
         >> [2,48000]
     """
+
     def __init__(self,
                  audio_path_or_files: Union[os.PathLike, List[os.PathLike]],
                  sample_rate: int,
                  duration: float,
                  batch_size: int,
-                 random: bool = True):
+                 random: bool=True):
         if isinstance(audio_path_or_files, list):
             self.audio_files = audio_path_or_files
         elif os.path.isdir(audio_path_or_files):
-            self.audio_files = glob.glob(audio_path_or_files + '/*.wav',
-                                         recursive=True)
+            self.audio_files = glob.glob(
+                audio_path_or_files + '/*.wav', recursive=True)
             if len(self.audio_files) == 0:
                 raise FileNotFoundError(
                     f'no files were found in {audio_path_or_files}')
@@ -176,8 +178,8 @@ class NoiseSource:
         self.batch_size = batch_size
         self.sample_rate = sample_rate
         self.duration = int(duration * sample_rate)
-        self._data = paddle.zeros((self.batch_size, self.duration),
-                                  dtype='float32')
+        self._data = paddle.zeros(
+            (self.batch_size, self.duration), dtype='float32')
 
     def load_wav(self, file: os.PathLike):
         s, _ = paddleaudio.load(file, sr=self.sample_rate)
@@ -225,16 +227,17 @@ class RIRSource(nn.Layer):
         reader = T.RIRSource(<rir_folder>, sample_rate=16000, random=True)
         weight = reader()
     """
+
     def __init__(self,
                  rir_path_or_files: Union[os.PathLike, List[os.PathLike]],
                  sample_rate: int,
-                 random: bool = True):
+                 random: bool=True):
         super(RIRSource, self).__init__()
         if isinstance(rir_path_or_files, list):
             self.rir_files = rir_path_or_files
         elif os.path.isdir(rir_path_or_files):
-            self.rir_files = glob.glob(rir_path_or_files + '/*.wav',
-                                       recursive=True)
+            self.rir_files = glob.glob(
+                rir_path_or_files + '/*.wav', recursive=True)
             if len(self.rir_files) == 0:
                 raise FileNotFoundError(
                     f'no files were found in {rir_path_or_files}')
