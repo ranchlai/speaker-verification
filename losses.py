@@ -180,12 +180,10 @@ class CMSoftmax(AngularMargin):
         self.margin2 = margin2
 
     def forward(self, logits, targets):
-        # logits = self.drop(logits)
         logits = F.normalize(logits, p=2, axis=1, epsilon=1e-8)
         wn = F.normalize(self.w, p=2, axis=0, epsilon=1e-8)
         cosine = logits @wn
 
-        #cosine = outputs.astype('float32')
         sine = paddle.sqrt(1.0 - paddle.square(cosine))
         phi = cosine * self.cos_m - sine * self.sin_m  # cos(theta + m)
         if self.easy_margin:
