@@ -32,34 +32,6 @@ from paddleaudio.utils import augments, get_logger
 logger = get_logger(__file__)
 
 
-def spect_permute(spect, tempo_axis, nblocks):
-    """spectrogram  permutaion"""
-    assert spect.ndim == 2, 'only supports 2d tensor or numpy array'
-    if tempo_axis == 0:
-        nt, nf = spect.shape
-    else:
-        nf, nt = spect.shape
-    if nblocks <= 1:
-        return spect
-
-    block_width = nt // nblocks + 1
-    if tempo_axis == 1:
-        blocks = [
-            spect[:, block_width * i:(i + 1) * block_width]
-            for i in range(nblocks)
-        ]
-        np.random.shuffle(blocks)
-        new_spect = np.concatenate(blocks, 1)
-    else:
-        blocks = [
-            spect[block_width * i:(i + 1) * block_width, :]
-            for i in range(nblocks)
-        ]
-        np.random.shuffle(blocks)
-        new_spect = np.concatenate(blocks, 0)
-    return new_spect
-
-
 def random_choice(a):
     i = np.random.randint(0, high=len(a))
     return a[int(i)]
@@ -101,7 +73,6 @@ class Dataset(paddle.io.Dataset):
                  augment_prob=0.5,
                  training=True,
                  balanced_sampling=False):
-        #):
         super(Dataset, self).__init__()
         self.keys, self.speakers, self.files = read_list(scp)
         self.key2file = {k: f for k, f in zip(self.keys, self.files)}
@@ -143,7 +114,6 @@ class Dataset(paddle.io.Dataset):
         logger.info(f'using {len(self.keys)} keys')
 
     def __getitem__(self, idx):
-        #print(f'dataset idx: {idx}')
         idx = idx % len(self.keys)
         key = self.keys[idx]
         spk = key.split('-')[0]
@@ -188,7 +158,6 @@ class Dataset(paddle.io.Dataset):
 def worker_init(worker_id):
     time.sleep(worker_id / 32)
     seed = int(time.time()) % 10000 + worker_id
-    #  logger.info(f'seed={seed}')
     np.random.seed(seed)
     random.seed(seed)
     paddle.seed(seed)
@@ -202,14 +171,6 @@ def get_train_loader(config):
         speaker_set=config['speaker_set'],
         augment=True,
         duration=config['duration'])
-
-    # train_sampler = paddle.io.DistributedBatchSampler(
-    # dataset, batch_size=config['batch_size'], shuffle=True, drop_last=True)
-
-    # train_loader = paddle.io.DataLoader(dataset,
-    #                                    batch_sampler = train_sampler,
-    #                                     num_workers=config['num_workers'],
-    #                                     worker_init_fn=worker_init)
 
     train_loader = paddle.io.DataLoader(
         dataset,
