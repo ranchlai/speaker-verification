@@ -33,8 +33,7 @@ from paddleaudio.utils import get_logger
 from dataset import get_train_loader
 from losses import AdditiveAngularMargin, AMSoftmaxLoss, CMSoftmax
 from models import *
-from utils import (MixUpLoss, NoiseSource, RIRSource, load_checkpoint,
-                   mixup_data, save_checkpoint)
+from utils import (NoiseSource, RIRSource, Normalize)
 
 
 def get_lr(step, base_lr, max_lr, half_cycle=5000, reverse=False):
@@ -47,19 +46,6 @@ def get_lr(step, base_lr, max_lr, half_cycle=5000, reverse=False):
     lr = max_lr - lr
 
     return lr
-
-
-class Normalize:
-    def __init__(self, mean_file, eps=1e-5):
-        self.eps = eps
-        mean = paddle.load(mean_file)['mean']
-        std = paddle.load(mean_file)['std']
-
-        self.mean = mean.unsqueeze((0, 2))
-
-    def __call__(self, x):
-        assert x.ndim == 3
-        return x - self.mean
 
 
 def freeze_bn(layer):

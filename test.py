@@ -52,8 +52,6 @@ class Normalize:
     def __init__(self, mean_file, eps=1e-5):
         self.eps = eps
         mean = paddle.load(mean_file)['mean']
-        #std = paddle.load(mean_file)['std'], unused
-
         self.mean = mean.unsqueeze((0, 2))
 
     def __call__(self, x):
