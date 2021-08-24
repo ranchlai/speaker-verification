@@ -1,20 +1,23 @@
 # Speaker verification using and ResnetSE EcapaTDNN
 
-
-## Requirements
-Install the requirements via
-```
-git clone https://github.com/PaddlePaddle/models.git
-cd models/PaddleAudio
-pip install -e .
-pip install -r requirements.txt
-```
-
 ## Introduction
 In this example, we demonstrate how to use PaddleAudio to train two types of networks for speaker verification.
 The networks we support here are
 - Resnet34 with Squeeze-and-excite block \[1\] to adaptively re-weight the feature maps.
 - ECAPA-TDNN  \[2\]
+
+## Requirements
+Install the requirements via
+```
+# install paddleaudio
+git clone https://github.com/PaddlePaddle/models.git
+cd models/PaddleAudio
+pip install -e .
+```
+Then clone this project, 
+```
+git clone https://github.com/ranchlai/speaker-verification.git
+```
 
 
 ## Datasets
