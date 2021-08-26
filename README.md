@@ -119,14 +119,14 @@ The test list is veri_test2.txt, which can be download from here [VoxCeleb1 (cle
 | ResnetSE34 + ASP + softmaxproto| - | [baseline_v2_ap](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_ap.model)|400|1.06%|
 | ResnetSE34 + ASP + softmaxproto| - | [baseline_v2_ap](http://www.robots.ox.ac.uk/~joon/data/baseline_v2_ap.model)|all|1.18%|
 
-### This repo
+### This example
 | model |config|checkpoint |eval frames| eer |
 | --------------- | --------------- | --------------- |--------------- |--------------- |
-| ResnetSE34 + SAP + CMSoftmax| [config.yaml](./egs/resent/config.yaml) |[checkpoint](https://bj.bcebos.com/paddleaudio/models/speaker/resnetse34_epoch92_eer0.00931.pdparams) | all|0.93%|
+| ResnetSE34 + SAP + CMSoftmax| [config.yaml](./egs/resnet/config.yaml) |[checkpoint](https://bj.bcebos.com/paddleaudio/models/speaker/resnetse34_epoch92_eer0.00931.pdparams) | all|0.93%|
 | ECAPA-TDNN + AAMSoftmax | [config.yaml](./egs/ecapa-tdnn/config.yaml) | [checkpoint](https://bj.bcebos.com/paddleaudio/models/speaker/tdnn_amsoftmax_epoch51_eer0.011.pdparams) | all|1.10%|
 
 ## Reference
 
-[1] Hu J, Shen L, Sun G. Squeeze-and-excitation networks[C]//Proceedings of the IEEE conference on computer vision and pattern recognition. 2018: 7132-7141
+[1] Hu J, Shen L, Sun G. Squeeze-and-excitation networks, Proceedings of the IEEE conference on computer vision and pattern recognition. 2018: 7132-7141
 
 [2] Desplanques B, Thienpondt J, Demuynck K. Ecapa-tdnn: Emphasized channel attention, propagation and aggregation in tdnn based speaker verification[J]. arXiv preprint arXiv:2005.07143, 2020.
