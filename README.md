@@ -1,4 +1,4 @@
-# Speaker verification using and ResnetSE EcapaTDNN
+# Speaker verification using ResnetSE and ECAPA-TDNN
 
 ## Introduction
 In this example, we demonstrate how to use PaddleAudio to train two types of networks for speaker verification.
