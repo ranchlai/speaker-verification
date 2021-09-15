@@ -21,6 +21,12 @@ cd speaker-verification
 pip install -r requirements.txt
 ```
 
+## Pytorch models
+Pytorch is supported for inference only.
+Install librosa, torch and torchaudio, then run
+``` bash
+python test_torch.py
+```
 
 ## Datasets
 ### Training datasets
