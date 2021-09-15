@@ -23,7 +23,7 @@ pip install -r requirements.txt
 
 ## Pytorch models
 Pytorch is supported for inference only.
-Install librosa, torch and torchaudio, then run
+Install librosa, torch and torchaudio, download the [checkpoint](https://zenodo.org/record/5509648/files/resnetse34_epoch92_eer0.00931.pth?download=1) here, then run
 ``` bash
 python test_torch.py
 ```
